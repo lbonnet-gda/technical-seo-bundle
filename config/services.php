@@ -29,6 +29,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Event/',
             '../src/Message/',
             '../src/Url/',
+            '../src/Hreflang/',
         ]);
 
     $services->set(SiteCrawler::class)

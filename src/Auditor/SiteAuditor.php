@@ -42,9 +42,13 @@ final class SiteAuditor implements SiteAuditorInterface
 
         /** @var array<string, PageAudit> $pagesByKey */
         $pagesByKey = [];
+        /** @var array<string, array<string, string>> $hreflangUrlsByKey dedup key of a page URL => its hreflang URLs */
+        $hreflangUrlsByKey = [];
 
         foreach ($pages as $page) {
-            $pagesByKey[UrlResolver::dedupKey($page->url)] = $page;
+            $key = UrlResolver::dedupKey($page->url);
+            $pagesByKey[$key] = $page;
+            $hreflangUrlsByKey[$key] = $page->signals?->hreflangUrls($page->url) ?? [];
         }
 
         /** @var array<string, list<Issue>> $extraIssues dedup key of a page URL => issues to add */
@@ -53,7 +57,10 @@ final class SiteAuditor implements SiteAuditorInterface
         $extraPages = [];
 
         foreach ($pages as $page) {
-            $issues = $this->auditCanonicalTarget($page, $context, $pagesByKey);
+            $issues = [
+                ...$this->auditCanonicalTarget($page, $context, $pagesByKey),
+                ...$this->auditHreflangTargets($page, $context, $pagesByKey, $hreflangUrlsByKey),
+            ];
 
             if ($issues !== []) {
                 $extraIssues[UrlResolver::dedupKey($page->url)] = $issues;
@@ -208,6 +215,85 @@ final class SiteAuditor implements SiteAuditorInterface
                 ),
             ),
         ];
+    }
+
+    /**
+     * @param array<string, PageAudit> $pagesByKey
+     * @param array<string, array<string, string>> $hreflangUrlsByKey
+     *
+     * @return list<Issue>
+     */
+    private function auditHreflangTargets(
+        PageAudit $page,
+        CrawlContext $context,
+        array $pagesByKey,
+        array $hreflangUrlsByKey,
+    ): array {
+        $pageKey = UrlResolver::dedupKey($page->url);
+        $issues = [];
+
+        foreach ($hreflangUrlsByKey[$pageKey] ?? [] as $targetKey => $target) {
+            if ($targetKey === $pageKey) {
+                continue;
+            }
+
+            $response = $context->responseFor($target) ?? $this->probe->probe($target);
+
+            if ($response === null) {
+                continue;
+            }
+
+            if ($response->isRedirect()) {
+                $issues[] = new Issue(
+                    IssueType::HreflangTargetRedirects,
+                    sprintf(
+                        'The hreflang alternate "%s" answers %d instead of 200; point it at the final URL.',
+                        $target,
+                        $response->statusCode,
+                    ),
+                );
+
+                continue;
+            }
+
+            if ($response->isError()) {
+                $issues[] = new Issue(
+                    IssueType::HreflangTargetNotOk,
+                    sprintf('The hreflang alternate "%s" answers %d.', $target, $response->statusCode),
+                );
+
+                continue;
+            }
+
+            $targetPage = $pagesByKey[$targetKey] ?? null;
+
+            if (
+                $response->headerRobotsDirectives()->hasNoindex()
+                || $targetPage?->signals?->metaRobotsDirectives()->hasNoindex() === true
+            ) {
+                $issues[] = new Issue(
+                    IssueType::HreflangTargetNoindex,
+                    sprintf(
+                        'The hreflang alternate "%s" carries a noindex directive, '
+                        .'so that language version cannot show up in search results.',
+                        $target,
+                    ),
+                );
+            }
+
+            if ($targetPage !== null && !isset($hreflangUrlsByKey[$targetKey][$pageKey])) {
+                $issues[] = new Issue(
+                    IssueType::HreflangNotReciprocal,
+                    sprintf(
+                        'The hreflang alternate "%s" does not link back to this page; '
+                        .'search engines ignore annotations that are not confirmed both ways.',
+                        $target,
+                    ),
+                );
+            }
+        }
+
+        return $issues;
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Lbonnet\TechnicalSeoBundle\Auditor;
 
+use Lbonnet\TechnicalSeoBundle\Hreflang\HreflangValidator;
 use Lbonnet\TechnicalSeoBundle\Model\HeadSignals;
 use Lbonnet\TechnicalSeoBundle\Model\Issue;
 use Lbonnet\TechnicalSeoBundle\Model\IssueType;
@@ -19,6 +20,7 @@ final class PageAuditor implements PageAuditorInterface
             ...$this->auditIndexingDirectives($response, $signals),
             ...$this->auditMetaRefresh($signals),
             ...$this->auditHtmlLang($signals),
+            ...$this->auditHreflang($response, $signals),
         ];
     }
 
@@ -147,5 +149,109 @@ final class PageAuditor implements PageAuditorInterface
         }
 
         return [new Issue(IssueType::MissingHtmlLang, 'The <html> element has no lang attribute.')];
+    }
+
+    /**
+     * @return list<Issue>
+     */
+    private function auditHreflang(PageResponse $response, HeadSignals $signals): array
+    {
+        $issues = [];
+
+        if ($signals->bodyHreflangLinks !== []) {
+            $first = $signals->bodyHreflangLinks[0];
+            $issues[] = new Issue(
+                IssueType::HreflangNotInHead,
+                sprintf(
+                    '%d hreflang link(s) sit outside <head> and are ignored (first: "%s" for "%s"). Check for an '
+                    .'invalid element earlier in <head>, which ends it sooner than the source suggests.',
+                    count($signals->bodyHreflangLinks),
+                    $first->hreflang,
+                    $first->href,
+                ),
+            );
+        }
+
+        if ($signals->hreflangLinks === []) {
+            return $issues;
+        }
+        /** @var array<string, array<string, string>> $urlsByValue lower-cased hreflang => dedup key => URL */
+        $urlsByValue = [];
+        $hasXDefault = false;
+
+        foreach ($signals->hreflangLinks as $link) {
+            $reason = HreflangValidator::explain($link->hreflang);
+
+            if ($reason !== null) {
+                $issues[] = new Issue(
+                    IssueType::HreflangInvalidCode,
+                    sprintf('The hreflang value "%s" is invalid: %s.', $link->hreflang, $reason),
+                );
+            }
+
+            if (!UrlResolver::isAbsoluteHttpUrl($link->href)) {
+                $issues[] = new Issue(
+                    IssueType::HreflangRelativeUrl,
+                    sprintf(
+                        'The "%s" alternate "%s" is not a fully-qualified URL, which hreflang requires.',
+                        $link->hreflang,
+                        $link->href,
+                    ),
+                );
+            }
+
+            $url = UrlResolver::resolve($response->url, $link->href);
+
+            if ($url !== null) {
+                $urlsByValue[strtolower($link->hreflang)][UrlResolver::dedupKey($url)] = $url;
+            }
+
+            $hasXDefault = $hasXDefault || $link->isXDefault();
+        }
+
+        foreach ($urlsByValue as $value => $urls) {
+            if (count($urls) < 2) {
+                continue;
+            }
+
+            $issues[] = new Issue(
+                IssueType::HreflangConflictingUrls,
+                sprintf(
+                    'The hreflang value "%s" is declared for %d different URLs (%s).',
+                    $value,
+                    count($urls),
+                    implode(', ', array_map(static fn(string $url): string => '"'.$url.'"', array_values($urls))),
+                ),
+            );
+        }
+
+        if (!isset($signals->hreflangUrls($response->url)[UrlResolver::dedupKey($response->url)])) {
+            $issues[] = new Issue(
+                IssueType::HreflangMissingSelf,
+                'The page lists its hreflang alternates but not itself; each language version must list itself too.',
+            );
+        }
+
+        $canonical = $signals->canonicalElsewhere($response->url);
+
+        if ($canonical !== null) {
+            $issues[] = new Issue(
+                IssueType::HreflangCanonicalMismatch,
+                sprintf(
+                    'The page declares hreflang alternates but its canonical is "%s"; '
+                    .'hreflang only works between canonical URLs.',
+                    $canonical,
+                ),
+            );
+        }
+
+        if (!$hasXDefault) {
+            $issues[] = new Issue(
+                IssueType::HreflangMissingXDefault,
+                'The page declares hreflang alternates without an "x-default" fallback for unmatched languages.',
+            );
+        }
+
+        return $issues;
     }
 }

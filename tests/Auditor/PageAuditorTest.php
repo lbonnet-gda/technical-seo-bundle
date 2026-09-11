@@ -6,6 +6,7 @@ namespace Lbonnet\TechnicalSeoBundle\Tests\Auditor;
 
 use Lbonnet\TechnicalSeoBundle\Auditor\PageAuditor;
 use Lbonnet\TechnicalSeoBundle\Model\HeadSignals;
+use Lbonnet\TechnicalSeoBundle\Model\HreflangLink;
 use Lbonnet\TechnicalSeoBundle\Model\Issue;
 use Lbonnet\TechnicalSeoBundle\Model\IssueType;
 use Lbonnet\TechnicalSeoBundle\Model\PageResponse;
@@ -153,6 +154,127 @@ final class PageAuditorTest extends TestCase
         $issues = $this->audit(new HeadSignals(canonicalHrefs: ['https://example.com/a']));
 
         $this->assertSame([IssueType::MissingHtmlLang], self::types($issues));
+    }
+
+    public function testFlagsHreflangLinksOutsideHeadEvenWithoutAnyInside(): void
+    {
+        $issues = $this->audit(
+            new HeadSignals(
+                canonicalHrefs: ['https://example.com/a'],
+                htmlLang: 'fr',
+                bodyHreflangLinks: [
+                    new HreflangLink('fr', 'https://example.com/a'),
+                    new HreflangLink('en', 'https://example.com/en/a'),
+                ],
+            )
+        );
+
+        $this->assertSame([IssueType::HreflangNotInHead], self::types($issues));
+        $this->assertStringContainsString('2 hreflang link(s)', $issues[0]->message);
+    }
+
+    public function testFlagsAStrayHreflangLinkNextToACompleteSet(): void
+    {
+        $issues = $this->audit(
+            new HeadSignals(
+                canonicalHrefs: ['https://example.com/a'],
+                htmlLang: 'fr',
+                hreflangLinks: [
+                    new HreflangLink('fr', 'https://example.com/a'),
+                    new HreflangLink('en', 'https://example.com/en/a'),
+                    new HreflangLink('x-default', 'https://example.com/a'),
+                ],
+                bodyHreflangLinks: [new HreflangLink('de', 'https://example.com/de/a')],
+            )
+        );
+
+        $this->assertSame([IssueType::HreflangNotInHead], self::types($issues));
+    }
+
+    public function testACompleteHreflangSetHasNoIssue(): void
+    {
+        $this->assertSame([], $this->audit(self::withHreflang([
+            new HreflangLink('fr', 'https://example.com/a'),
+            new HreflangLink('en', 'https://example.com/en/a'),
+            new HreflangLink('x-default', 'https://example.com/a'),
+        ])));
+    }
+
+    public function testFlagsAnInvalidHreflangCode(): void
+    {
+        $issues = $this->audit(self::withHreflang([
+            new HreflangLink('fr', 'https://example.com/a'),
+            new HreflangLink('en-UK', 'https://example.com/en/a'),
+            new HreflangLink('x-default', 'https://example.com/a'),
+        ]));
+
+        $this->assertSame([IssueType::HreflangInvalidCode], self::types($issues));
+        $this->assertStringContainsString('"GB"', $issues[0]->message);
+    }
+
+    public function testFlagsARelativeHreflangUrl(): void
+    {
+        $issues = $this->audit(self::withHreflang([
+            new HreflangLink('fr', '/a'),
+            new HreflangLink('en', 'https://example.com/en/a'),
+            new HreflangLink('x-default', 'https://example.com/a'),
+        ]));
+
+        $this->assertSame([IssueType::HreflangRelativeUrl], self::types($issues));
+    }
+
+    public function testFlagsOneHreflangValueDeclaredForSeveralUrls(): void
+    {
+        $issues = $this->audit(self::withHreflang([
+            new HreflangLink('fr', 'https://example.com/a'),
+            new HreflangLink('FR', 'https://example.com/fr/a'),
+            new HreflangLink('x-default', 'https://example.com/a'),
+        ]));
+
+        $this->assertSame([IssueType::HreflangConflictingUrls], self::types($issues));
+    }
+
+    public function testFlagsAnHreflangSetMissingThePageItself(): void
+    {
+        $issues = $this->audit(self::withHreflang([
+            new HreflangLink('en', 'https://example.com/en/a'),
+            new HreflangLink('x-default', 'https://example.com/en/a'),
+        ]));
+
+        $this->assertSame([IssueType::HreflangMissingSelf], self::types($issues));
+    }
+
+    public function testFlagsAMissingXDefault(): void
+    {
+        $issues = $this->audit(self::withHreflang([
+            new HreflangLink('fr', 'https://example.com/a'),
+            new HreflangLink('en', 'https://example.com/en/a'),
+        ]));
+
+        $this->assertSame([IssueType::HreflangMissingXDefault], self::types($issues));
+    }
+
+    public function testFlagsHreflangOnANonCanonicalPage(): void
+    {
+        $issues = $this->audit(
+            self::withHreflang(
+                [
+                    new HreflangLink('fr', 'https://example.com/a'),
+                    new HreflangLink('x-default', 'https://example.com/a'),
+                ],
+                canonical: 'https://example.com/other',
+            )
+        );
+
+        $this->assertSame([IssueType::HreflangCanonicalMismatch], self::types($issues));
+    }
+
+    /**
+     * @param list<HreflangLink> $links
+     */
+    private static function withHreflang(array $links, string $canonical = 'https://example.com/a'): HeadSignals
+    {
+        return new HeadSignals(canonicalHrefs: [$canonical], htmlLang: 'fr', hreflangLinks: $links);
     }
 
     /**

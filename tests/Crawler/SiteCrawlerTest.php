@@ -272,6 +272,31 @@ final class SiteCrawlerTest extends TestCase
         );
     }
 
+    public function testFlagsAnHreflangAlternateThatDoesNotLinkBack(): void
+    {
+        $httpClient = $this->siteWith([
+            'https://example.com/fr' => self::html(
+                'https://example.com/fr',
+                '<a href="/en">English</a>',
+                '<link rel="alternate" hreflang="fr" href="https://example.com/fr">'
+                .'<link rel="alternate" hreflang="en" href="https://example.com/en">'
+                .'<link rel="alternate" hreflang="x-default" href="https://example.com/fr">',
+            ),
+            'https://example.com/en' => self::html(
+                'https://example.com/en',
+                '',
+                '<link rel="alternate" hreflang="en" href="https://example.com/en">'
+                .'<link rel="alternate" hreflang="x-default" href="https://example.com/en">',
+            ),
+        ]);
+
+        $report = $this->crawler($httpClient)->crawl('https://example.com/fr');
+
+        $this->assertSame(2, $report->totalChecked);
+        $this->assertSame([IssueType::HreflangNotReciprocal], self::types($report->pages[0]->issues));
+        $this->assertSame([], $report->pages[1]->issues);
+    }
+
     private function crawler(
         HttpClientInterface $httpClient,
         int $maxDepth = 3,

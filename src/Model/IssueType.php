@@ -28,6 +28,19 @@ enum IssueType: string
     case InternalLinkToRedirect = 'internal_link_to_redirect';
     case MetaRefreshRedirect = 'meta_refresh_redirect';
 
+    // --- hreflang ---
+    case HreflangInvalidCode = 'hreflang_invalid_code';
+    case HreflangNotInHead = 'hreflang_not_in_head';
+    case HreflangRelativeUrl = 'hreflang_relative_url';
+    case HreflangConflictingUrls = 'hreflang_conflicting_urls';
+    case HreflangMissingSelf = 'hreflang_missing_self';
+    case HreflangNotReciprocal = 'hreflang_not_reciprocal';
+    case HreflangTargetNotOk = 'hreflang_target_not_ok';
+    case HreflangTargetRedirects = 'hreflang_target_redirects';
+    case HreflangTargetNoindex = 'hreflang_target_noindex';
+    case HreflangCanonicalMismatch = 'hreflang_canonical_mismatch';
+    case HreflangMissingXDefault = 'hreflang_missing_x_default';
+
     // --- Page-level markup ---
     case MissingHtmlLang = 'missing_html_lang';
 
@@ -43,7 +56,16 @@ enum IssueType: string
             self::NoindexConflictsWithCanonical,
             self::RobotsDirectiveConflict,
             self::RedirectLoop,
-            self::RedirectToError => Severity::Error,
+            self::RedirectToError,
+            self::HreflangInvalidCode,
+            self::HreflangNotInHead,
+            self::HreflangRelativeUrl,
+            self::HreflangConflictingUrls,
+            self::HreflangMissingSelf,
+            self::HreflangNotReciprocal,
+            self::HreflangTargetNotOk,
+            self::HreflangTargetRedirects,
+            self::HreflangTargetNoindex => Severity::Error,
 
             self::CanonicalRelative,
             self::CanonicalChain,
@@ -51,7 +73,10 @@ enum IssueType: string
             self::TemporaryRedirect,
             self::InternalLinkToRedirect,
             self::MetaRefreshRedirect,
+            self::HreflangCanonicalMismatch,
             self::MissingHtmlLang => Severity::Warning,
+
+            self::HreflangMissingXDefault => Severity::Notice,
         };
     }
 }

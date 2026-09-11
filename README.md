@@ -73,6 +73,25 @@ An issue about a redirect itself (`redirect_loop`, `redirect_to_error`, `redirec
 is reported **once**, on the redirecting URL, however many pages link to it: that is where it gets fixed. Each linking
 page gets its own `internal_link_to_redirect` instead.
 
+### hreflang
+
+| Check                         | Severity | What it catches                                                                                                                            |
+|-------------------------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| `hreflang_invalid_code`       | error    | Not an ISO 639-1 language, with an optional ISO 15924 script and ISO 3166-1 alpha-2 region (`en-UK`, `es-419`, `fr_FR`, a region alone...) |
+| `hreflang_not_in_head`        | error    | hreflang links outside `<head>` — usually an invalid element ending `<head>` early                                                         |
+| `hreflang_relative_url`       | error    | An alternate URL that is not fully qualified                                                                                               |
+| `hreflang_conflicting_urls`   | error    | The same hreflang value declared for several URLs                                                                                          |
+| `hreflang_missing_self`       | error    | The page lists its alternates but not itself                                                                                               |
+| `hreflang_not_reciprocal`     | error    | A crawled alternate does not link back to the page, so both annotations are ignored                                                        |
+| `hreflang_target_not_ok`      | error    | An alternate answers 4xx/5xx                                                                                                               |
+| `hreflang_target_redirects`   | error    | An alternate answers 3xx instead of 200                                                                                                    |
+| `hreflang_target_noindex`     | error    | An alternate carries a `noindex` (meta tag, or `X-Robots-Tag` for an uncrawled alternate)                                                  |
+| `hreflang_canonical_mismatch` | warning  | A page declaring hreflang has a canonical pointing elsewhere: hreflang only works between canonical URLs                                   |
+| `hreflang_missing_x_default`  | notice   | No `x-default` fallback for unmatched languages                                                                                            |
+
+Every hreflang check concerns pages that declare `<link rel="alternate" hreflang>` tags, so a monolingual site gets none
+of them, with nothing to configure. Annotations sent through HTTP `Link` headers or XML sitemaps are not read.
+
 ### Markup
 
 | Check               | Severity | What it catches                     |
@@ -81,7 +100,7 @@ page gets its own `internal_link_to_redirect` instead.
 
 Broken links themselves are deliberately **not** reported here — that is what
 [link-checker-bundle](https://github.com/lbonnet-gda/link-checker-bundle) is for. A URL that answers 4xx is still
-recorded, so canonical targets and redirect chains can be checked against it.
+recorded, so canonical targets, hreflang alternates, and redirect chains can be checked against it.
 
 ## Configuration
 
@@ -98,7 +117,7 @@ technical_seo:
         - '#\.pdf$#'
 
     max_redirect_hops: 1 # how many redirects a URL may go through before the chain is reported
-    resolve_external_targets: true # request canonical targets the crawl did not visit, to check they answer 200
+    resolve_external_targets: true # request canonical and hreflang targets the crawl did not visit, to check they answer 200
     max_external_target_checks: 200 # cap on those extra requests per crawl (0 = unlimited)
 
     fail_on: 'error' # lowest severity that makes the command exit non-zero: error, warning or notice
@@ -254,9 +273,11 @@ Unless `storage_dir` is disabled, each crawl is stored as JSON:
 - **A redirect target is requested twice**: once while resolving the chain (headers only, the body is canceled), then
   again to read its markup. This keeps chain resolution independent of crawling, at the cost of one extra HEAD-sized
   request per redirect.
-- **`canonical_not_in_head` trusts the parsed tree**, not the source order. That is deliberate — it is the same
-  head/body split a search engine's parser produces — but a handwritten test fixture and a browser may disagree on
-  where an oddly placed `<link>` ends up.
+- **`canonical_not_in_head` and `hreflang_not_in_head` read the page with libxml**, not with DomCrawler, whose parser
+  changes across PHP and Symfony versions and, through `masterminds/html5`, never closes `<head>` early. Like browsers,
+  libxml closes `<head>` on the usual culprits (a stray `<div>`, a tracking `<img>`, stray text, a misplaced
+  `<iframe>`), but not on an `<svg>` or a custom element. It also keeps a `<noscript>` holding an `<img>` inside
+  `<head>`, which is how a JavaScript-enabled crawler reads it.
 
 ## Security
 

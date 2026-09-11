@@ -66,7 +66,7 @@ final class TechnicalSeoBundle extends AbstractBundle
         $children->booleanNode('resolve_external_targets')
             ->defaultTrue()
             ->info(
-                'Request canonical targets that the crawl did not already visit, to check whether they answer 200. Disable to keep the audit strictly within the pages that were crawled.'
+                'Request canonical and hreflang targets that the crawl did not already visit, to check whether they answer 200. Disable to keep the audit strictly within the pages that were crawled.'
             )
             ->end();
 

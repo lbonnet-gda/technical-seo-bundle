@@ -8,6 +8,7 @@ use Lbonnet\TechnicalSeoBundle\Auditor\SiteAuditor;
 use Lbonnet\TechnicalSeoBundle\Http\TargetProbeInterface;
 use Lbonnet\TechnicalSeoBundle\Model\CrawlContext;
 use Lbonnet\TechnicalSeoBundle\Model\HeadSignals;
+use Lbonnet\TechnicalSeoBundle\Model\HreflangLink;
 use Lbonnet\TechnicalSeoBundle\Model\Issue;
 use Lbonnet\TechnicalSeoBundle\Model\IssueType;
 use Lbonnet\TechnicalSeoBundle\Model\PageAudit;
@@ -339,6 +340,109 @@ final class SiteAuditorTest extends TestCase
         $this->assertStringContainsString('points back', $audited[0]->issues[0]->message);
     }
 
+    public function testAReciprocalHreflangPairHasNoIssue(): void
+    {
+        $pair = ['fr' => 'https://example.com/fr', 'en' => 'https://example.com/en'];
+        $pages = [
+            $this->page('https://example.com/fr', hreflang: $pair),
+            $this->page('https://example.com/en', hreflang: $pair),
+        ];
+
+        $context = self::okResponses('https://example.com/fr', 'https://example.com/en');
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([], $audited[0]->issues);
+        $this->assertSame([], $audited[1]->issues);
+    }
+
+    public function testFlagsAnHreflangAlternateThatDoesNotLinkBack(): void
+    {
+        $pages = [
+            $this->page(
+                'https://example.com/fr',
+                hreflang: ['fr' => 'https://example.com/fr', 'en' => 'https://example.com/en'],
+            ),
+            $this->page('https://example.com/en', hreflang: ['en' => 'https://example.com/en']),
+        ];
+
+        $context = self::okResponses('https://example.com/fr', 'https://example.com/en');
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::HreflangNotReciprocal], self::types($audited[0]->issues));
+        $this->assertSame([], $audited[1]->issues);
+    }
+
+    public function testFlagsAnHreflangAlternateInError(): void
+    {
+        $pages = [$this->page('https://example.com/fr', hreflang: ['en' => 'https://example.com/en'])];
+        $context = new CrawlContext(
+            responses: [
+                'https://example.com/en' => new PageResponse('https://example.com/en', Response::HTTP_NOT_FOUND),
+            ],
+        );
+
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::HreflangTargetNotOk], self::types($audited[0]->issues));
+    }
+
+    public function testFlagsARedirectingHreflangAlternate(): void
+    {
+        $pages = [$this->page('https://example.com/fr', hreflang: ['en' => 'https://example.com/en'])];
+        $context = new CrawlContext(
+            responses: [
+                'https://example.com/en' => new PageResponse(
+                    'https://example.com/en',
+                    Response::HTTP_MOVED_PERMANENTLY,
+                ),
+            ],
+        );
+
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::HreflangTargetRedirects], self::types($audited[0]->issues));
+    }
+
+    public function testFlagsANoindexHreflangAlternate(): void
+    {
+        $pair = ['fr' => 'https://example.com/fr', 'en' => 'https://example.com/en'];
+        $pages = [
+            $this->page('https://example.com/fr', hreflang: $pair),
+            $this->page('https://example.com/en', metaRobots: ['noindex'], hreflang: $pair),
+        ];
+
+        $context = self::okResponses('https://example.com/fr', 'https://example.com/en');
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::HreflangTargetNoindex], self::types($audited[0]->issues));
+    }
+
+    public function testDoesNotCheckReciprocityOfAnAlternateOutsideTheCrawl(): void
+    {
+        $probe = $this->createMock(TargetProbeInterface::class);
+        $probe->expects($this->once())
+            ->method('probe')
+            ->with('https://example.de/')
+            ->willReturn(new PageResponse('https://example.de/', Response::HTTP_OK));
+
+        $pages = [$this->page('https://example.com/fr', hreflang: ['de' => 'https://example.de/'])];
+
+        $audited = (new SiteAuditor($probe))->audit($pages, new CrawlContext());
+
+        $this->assertSame([], $audited[0]->issues);
+    }
+
+    private static function okResponses(string ...$urls): CrawlContext
+    {
+        $responses = [];
+
+        foreach ($urls as $url) {
+            $responses[$url] = new PageResponse($url, Response::HTTP_OK);
+        }
+
+        return new CrawlContext(responses: $responses);
+    }
+
     private function auditor(): SiteAuditor
     {
         return new SiteAuditor($this->createMock(TargetProbeInterface::class));
@@ -347,12 +451,14 @@ final class SiteAuditorTest extends TestCase
     /**
      * @param list<Issue> $issues
      * @param list<string> $metaRobots
+     * @param array<string, string> $hreflang hreflang value => href
      */
     private function page(
         string $url,
         ?string $canonical = null,
         array $issues = [],
         array $metaRobots = [],
+        array $hreflang = [],
     ): PageAudit {
         return new PageAudit(
             url: $url,
@@ -361,6 +467,11 @@ final class SiteAuditorTest extends TestCase
             signals: new HeadSignals(
                 canonicalHrefs: $canonical !== null ? [$canonical] : [],
                 metaRobots: $metaRobots,
+                hreflangLinks: array_map(
+                    static fn(string $value, string $href): HreflangLink => new HreflangLink($value, $href),
+                    array_keys($hreflang),
+                    array_values($hreflang),
+                ),
             ),
         );
     }

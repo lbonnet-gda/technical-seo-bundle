@@ -12,6 +12,8 @@ final class HeadSignals
      * @param list<string> $canonicalHrefs raw href of every <link rel="canonical"> inside <head>
      * @param list<string> $bodyCanonicalHrefs same, for tags found outside <head> (which search engines ignore)
      * @param list<string> $metaRobots raw content of every <meta name="robots"> tag
+     * @param list<HreflangLink> $hreflangLinks every <link rel="alternate" hreflang> inside <head>
+     * @param list<HreflangLink> $bodyHreflangLinks same, for tags found outside <head> (which search engines ignore)
      */
     public function __construct(
         public readonly array $canonicalHrefs = [],
@@ -19,6 +21,8 @@ final class HeadSignals
         public readonly array $metaRobots = [],
         public readonly ?string $metaRefreshUrl = null,
         public readonly ?string $htmlLang = null,
+        public readonly array $hreflangLinks = [],
+        public readonly array $bodyHreflangLinks = [],
     ) {
     }
 
@@ -49,5 +53,23 @@ final class HeadSignals
         }
 
         return $canonical;
+    }
+
+    /**
+     * @return array<string, string> dedup key => URL
+     */
+    public function hreflangUrls(string $pageUrl): array
+    {
+        $urls = [];
+
+        foreach ($this->hreflangLinks as $link) {
+            $url = UrlResolver::resolve($pageUrl, $link->href);
+
+            if ($url !== null) {
+                $urls[UrlResolver::dedupKey($url)] = $url;
+            }
+        }
+
+        return $urls;
     }
 }

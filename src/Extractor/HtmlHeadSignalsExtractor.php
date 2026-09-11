@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Lbonnet\TechnicalSeoBundle\Extractor;
 
+use DOMDocument;
 use DOMElement;
 use DOMNode;
+use DOMXPath;
 use Lbonnet\TechnicalSeoBundle\Model\HeadSignals;
-use Symfony\Component\DomCrawler\Crawler;
+use Lbonnet\TechnicalSeoBundle\Model\HreflangLink;
 
 final class HtmlHeadSignalsExtractor implements HeadSignalsExtractorInterface
 {
@@ -17,13 +19,26 @@ final class HtmlHeadSignalsExtractor implements HeadSignalsExtractorInterface
             return new HeadSignals();
         }
 
-        $crawler = new Crawler($html);
+        $xpath = new DOMXPath(self::parse($html));
 
         $canonicalHrefs = [];
         $bodyCanonicalHrefs = [];
+        $hreflangLinks = [];
+        $bodyHreflangLinks = [];
 
-        foreach ($crawler->filter('link[rel]') as $element) {
-            if (!$element instanceof DOMElement) {
+        foreach (self::elements($xpath, '//link[@rel]') as $element) {
+            if (self::isHreflangLink($element)) {
+                $link = new HreflangLink(
+                    trim($element->getAttribute('hreflang')),
+                    trim($element->getAttribute('href')),
+                );
+
+                if (self::hasAncestor($element, 'head')) {
+                    $hreflangLinks[] = $link;
+                } else {
+                    $bodyHreflangLinks[] = $link;
+                }
+
                 continue;
             }
 
@@ -33,7 +48,7 @@ final class HtmlHeadSignalsExtractor implements HeadSignalsExtractorInterface
 
             $href = trim($element->getAttribute('href'));
 
-            if (self::isInsideHead($element)) {
+            if (self::hasAncestor($element, 'head')) {
                 $canonicalHrefs[] = $href;
 
                 continue;
@@ -45,16 +60,58 @@ final class HtmlHeadSignalsExtractor implements HeadSignalsExtractorInterface
         return new HeadSignals(
             canonicalHrefs: $canonicalHrefs,
             bodyCanonicalHrefs: $bodyCanonicalHrefs,
-            metaRobots: $this->extractMetaRobots($crawler),
-            metaRefreshUrl: $this->extractMetaRefreshUrl($crawler),
-            htmlLang: $this->extractHtmlLang($crawler),
+            metaRobots: $this->extractMetaRobots($xpath),
+            metaRefreshUrl: $this->extractMetaRefreshUrl($xpath),
+            htmlLang: $this->extractHtmlLang($xpath),
+            hreflangLinks: $hreflangLinks,
+            bodyHreflangLinks: $bodyHreflangLinks,
         );
     }
 
-    private static function isInsideHead(DOMNode $node): bool
+    private static function parse(string $html): DOMDocument
+    {
+        $document = new DOMDocument();
+        $internalErrors = libxml_use_internal_errors(true);
+
+        $document->loadHTML(mb_encode_numericentity($html, [0x80, 0x10FFFF, 0, 0x1FFFFF], 'UTF-8'));
+
+        libxml_clear_errors();
+        libxml_use_internal_errors($internalErrors);
+
+        return $document;
+    }
+
+    /**
+     * @return list<DOMElement>
+     */
+    private static function elements(DOMXPath $xpath, string $expression): array
+    {
+        $elements = [];
+
+        foreach ($xpath->query($expression) ?: [] as $node) {
+            if ($node instanceof DOMElement && !self::hasAncestor($node, 'template')) {
+                $elements[] = $node;
+            }
+        }
+
+        return $elements;
+    }
+
+    private static function isHreflangLink(DOMElement $element): bool
+    {
+        if (!$element->hasAttribute('hreflang')) {
+            return false;
+        }
+
+        $relTokens = preg_split('/\s+/', strtolower(trim($element->getAttribute('rel')))) ?: [];
+
+        return in_array('alternate', $relTokens, true);
+    }
+
+    private static function hasAncestor(DOMNode $node, string $name): bool
     {
         for ($parent = $node->parentNode; $parent !== null; $parent = $parent->parentNode) {
-            if (strcasecmp($parent->nodeName, 'head') === 0) {
+            if (strcasecmp($parent->nodeName, $name) === 0) {
                 return true;
             }
         }
@@ -65,15 +122,11 @@ final class HtmlHeadSignalsExtractor implements HeadSignalsExtractorInterface
     /**
      * @return list<string>
      */
-    private function extractMetaRobots(Crawler $crawler): array
+    private function extractMetaRobots(DOMXPath $xpath): array
     {
         $values = [];
 
-        foreach ($crawler->filter('meta[name]') as $element) {
-            if (!$element instanceof DOMElement) {
-                continue;
-            }
-
+        foreach (self::elements($xpath, '//meta[@name]') as $element) {
             if (strcasecmp(trim($element->getAttribute('name')), 'robots') !== 0) {
                 continue;
             }
@@ -90,20 +143,14 @@ final class HtmlHeadSignalsExtractor implements HeadSignalsExtractorInterface
         return $values;
     }
 
-    private function extractMetaRefreshUrl(Crawler $crawler): ?string
+    private function extractMetaRefreshUrl(DOMXPath $xpath): ?string
     {
-        foreach ($crawler->filter('meta[http-equiv]') as $element) {
-            if (!$element instanceof DOMElement) {
-                continue;
-            }
-
+        foreach (self::elements($xpath, '//meta[@http-equiv]') as $element) {
             if (strcasecmp(trim($element->getAttribute('http-equiv')), 'refresh') !== 0) {
                 continue;
             }
 
-            $content = $element->getAttribute('content');
-
-            if (preg_match('#url\s*=\s*[\'"]?([^\'";]+)#i', $content, $matches) === 1) {
+            if (preg_match('#url\s*=\s*[\'"]?([^\'";]+)#i', $element->getAttribute('content'), $matches) === 1) {
                 $url = trim($matches[1]);
 
                 if ($url !== '') {
@@ -115,15 +162,10 @@ final class HtmlHeadSignalsExtractor implements HeadSignalsExtractorInterface
         return null;
     }
 
-    private function extractHtmlLang(Crawler $crawler): ?string
+    private function extractHtmlLang(DOMXPath $xpath): ?string
     {
-        $htmlNode = $crawler->filter('html');
-
-        if ($htmlNode->count() === 0) {
-            return null;
-        }
-
-        $lang = trim((string)$htmlNode->first()->attr('lang'));
+        $htmlElement = self::elements($xpath, '/html')[0] ?? null;
+        $lang = $htmlElement !== null ? trim($htmlElement->getAttribute('lang')) : '';
 
         return $lang !== '' ? $lang : null;
     }
