@@ -1,0 +1,243 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Lbonnet\TechnicalSeoBundle\Tests\Auditor;
+
+use Lbonnet\TechnicalSeoBundle\Auditor\SiteAuditor;
+use Lbonnet\TechnicalSeoBundle\Http\TargetProbeInterface;
+use Lbonnet\TechnicalSeoBundle\Model\CrawlContext;
+use Lbonnet\TechnicalSeoBundle\Model\HeadSignals;
+use Lbonnet\TechnicalSeoBundle\Model\Issue;
+use Lbonnet\TechnicalSeoBundle\Model\IssueType;
+use Lbonnet\TechnicalSeoBundle\Model\PageAudit;
+use Lbonnet\TechnicalSeoBundle\Model\PageResponse;
+use Lbonnet\TechnicalSeoBundle\Model\RedirectChain;
+use Lbonnet\TechnicalSeoBundle\Model\RedirectHop;
+use PHPUnit\Framework\TestCase;
+use Symfony\Component\HttpFoundation\Response;
+
+final class SiteAuditorTest extends TestCase
+{
+    public function testFlagsACanonicalPointingToARedirect(): void
+    {
+        $pages = [$this->page('https://example.com/a', canonical: 'https://example.com/b')];
+        $context = new CrawlContext(
+            responses: [
+                'https://example.com/b' => new PageResponse(
+                    'https://example.com/b',
+                    Response::HTTP_MOVED_PERMANENTLY,
+                ),
+            ],
+        );
+
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::CanonicalTargetRedirects], self::types($audited[0]->issues));
+    }
+
+    public function testFlagsACanonicalPointingToAnError(): void
+    {
+        $pages = [$this->page('https://example.com/a', canonical: 'https://example.com/b')];
+        $context = new CrawlContext(
+            responses: [
+                'https://example.com/b' => new PageResponse('https://example.com/b', Response::HTTP_NOT_FOUND),
+            ],
+        );
+
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::CanonicalTargetNotOk], self::types($audited[0]->issues));
+    }
+
+    public function testSelfReferencingCanonicalIsFine(): void
+    {
+        $pages = [$this->page('https://example.com/a', canonical: 'https://example.com/a')];
+
+        $audited = $this->auditor()->audit($pages, new CrawlContext());
+
+        $this->assertSame([], $audited[0]->issues);
+    }
+
+    public function testRelativeCanonicalIsResolvedAgainstThePage(): void
+    {
+        $pages = [$this->page('https://example.com/section/a', canonical: '../b')];
+        $context = new CrawlContext(
+            responses: [
+                'https://example.com/b' => new PageResponse('https://example.com/b', Response::HTTP_GONE),
+            ],
+        );
+
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::CanonicalTargetNotOk], self::types($audited[0]->issues));
+    }
+
+    public function testProbesACanonicalTargetOutsideTheCrawl(): void
+    {
+        $probe = $this->createMock(TargetProbeInterface::class);
+        $probe->expects($this->once())
+            ->method('probe')
+            ->with('https://example.com/b')
+            ->willReturn(new PageResponse('https://example.com/b', Response::HTTP_NOT_FOUND));
+
+        $pages = [$this->page('https://example.com/a', canonical: 'https://example.com/b')];
+
+        $audited = (new SiteAuditor($probe))->audit($pages, new CrawlContext());
+
+        $this->assertSame([IssueType::CanonicalTargetNotOk], self::types($audited[0]->issues));
+    }
+
+    public function testAnUnknownCanonicalTargetIsNotReported(): void
+    {
+        $pages = [$this->page('https://example.com/a', canonical: 'https://example.com/b')];
+
+        $audited = $this->auditor()->audit($pages, new CrawlContext());
+
+        $this->assertSame([], $audited[0]->issues);
+    }
+
+    public function testFlagsEveryPageLinkingToARedirect(): void
+    {
+        $pages = [
+            $this->page('https://example.com/a'),
+            $this->page('https://example.com/b'),
+        ];
+        $context = new CrawlContext(
+            redirectChains: [
+                'https://example.com/old' => new RedirectChain(
+                    'https://example.com/old',
+                    Response::HTTP_MOVED_PERMANENTLY,
+                    [
+                        new RedirectHop(
+                            'https://example.com/old',
+                            Response::HTTP_MOVED_PERMANENTLY,
+                            'https://example.com/new'
+                        ),
+                    ],
+                    'https://example.com/new',
+                    Response::HTTP_OK,
+                ),
+            ],
+            referrers: [
+                'https://example.com/old' => ['https://example.com/a', 'https://example.com/b'],
+            ],
+        );
+
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::InternalLinkToRedirect], self::types($audited[0]->issues));
+        $this->assertSame([IssueType::InternalLinkToRedirect], self::types($audited[1]->issues));
+        $this->assertStringContainsString('https://example.com/new', $audited[0]->issues[0]->message);
+    }
+
+    public function testFlagsAChainLongerThanAllowed(): void
+    {
+        $chain = new RedirectChain(
+            'https://example.com/old',
+            Response::HTTP_MOVED_PERMANENTLY,
+            [
+                new RedirectHop('https://example.com/old', Response::HTTP_MOVED_PERMANENTLY, 'https://example.com/mid'),
+                new RedirectHop('https://example.com/mid', Response::HTTP_MOVED_PERMANENTLY, 'https://example.com/new'),
+            ],
+            'https://example.com/new',
+            Response::HTTP_OK,
+        );
+
+        $context = new CrawlContext(
+            redirectChains: ['https://example.com/old' => $chain],
+            referrers: ['https://example.com/old' => ['https://example.com/a']],
+        );
+
+        $audited = $this->auditor()->audit([$this->page('https://example.com/a')], $context);
+
+        $this->assertSame(
+            [IssueType::InternalLinkToRedirect, IssueType::RedirectChainTooLong],
+            self::types($audited[0]->issues),
+        );
+    }
+
+    public function testAChainNobodyLinksToBecomesItsOwnEntry(): void
+    {
+        $chain = new RedirectChain(
+            'https://example.com/',
+            Response::HTTP_MOVED_PERMANENTLY,
+            [
+                new RedirectHop('https://example.com/', Response::HTTP_MOVED_PERMANENTLY, 'https://example.com/a'),
+                new RedirectHop('https://example.com/a', Response::HTTP_MOVED_PERMANENTLY, 'https://example.com/'),
+            ],
+            'https://example.com/',
+            null,
+            isLoop: true,
+        );
+
+        $audited = $this->auditor()->audit([], new CrawlContext(redirectChains: ['https://example.com/' => $chain]));
+
+        $this->assertCount(1, $audited);
+        $this->assertSame('https://example.com/', $audited[0]->url);
+        $this->assertSame(Response::HTTP_MOVED_PERMANENTLY, $audited[0]->statusCode);
+        $this->assertSame([IssueType::RedirectLoop], self::types($audited[0]->issues));
+    }
+
+    public function testAShortChainNobodyLinksToIsNotReported(): void
+    {
+        $chain = new RedirectChain(
+            'https://example.com/',
+            Response::HTTP_MOVED_PERMANENTLY,
+            [new RedirectHop('https://example.com/', Response::HTTP_MOVED_PERMANENTLY, 'https://example.com/a')],
+            'https://example.com/a',
+            Response::HTTP_OK,
+        );
+
+        $audited = $this->auditor()->audit([], new CrawlContext(redirectChains: ['https://example.com/' => $chain]));
+
+        $this->assertSame([], $audited);
+    }
+
+    public function testDisabledChecksAreDroppedFromTheReport(): void
+    {
+        $pages = [
+            $this->page('https://example.com/a', issues: [
+                new Issue(IssueType::MissingHtmlLang, 'no lang'),
+                new Issue(IssueType::CanonicalRelative, 'relative'),
+            ]),
+        ];
+
+        $auditor = new SiteAuditor(
+            $this->createMock(TargetProbeInterface::class),
+            disabledChecks: [IssueType::MissingHtmlLang->value],
+        );
+
+        $audited = $auditor->audit($pages, new CrawlContext());
+
+        $this->assertSame([IssueType::CanonicalRelative], self::types($audited[0]->issues));
+    }
+
+    private function auditor(): SiteAuditor
+    {
+        return new SiteAuditor($this->createMock(TargetProbeInterface::class));
+    }
+
+    /**
+     * @param list<Issue> $issues
+     */
+    private function page(string $url, ?string $canonical = null, array $issues = []): PageAudit
+    {
+        return new PageAudit(
+            url: $url,
+            statusCode: Response::HTTP_OK,
+            issues: $issues,
+            signals: new HeadSignals(canonicalHrefs: $canonical !== null ? [$canonical] : []),
+        );
+    }
+
+    /**
+     * @param list<Issue> $issues
+     *
+     * @return list<IssueType>
+     */
+    private static function types(array $issues): array
+    {
+        return array_map(static fn(Issue $issue): IssueType => $issue->type, $issues);
+    }
+}

@@ -1,0 +1,63 @@
+{
+    "name": "lbonnet/technical-seo-bundle",
+    "type": "symfony-bundle",
+    "description": "A Symfony bundle to crawl a site and audit technical SEO signals: canonical tags, indexing directives and redirects.",
+    "keywords": [
+        "symfony",
+        "bundle",
+        "seo",
+        "technical-seo",
+        "canonical",
+        "redirects",
+        "indexability",
+        "crawler",
+        "audit"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "lbonnet",
+            "homepage": "https://github.com/lbonnet-gda"
+        }
+    ],
+    "require": {
+        "php": ">=8.1",
+        "ext-dom": "*",
+        "lbonnet/crawler-toolkit": "^0.1.0",
+        "symfony/config": "^6.4 || ^7.0 || ^8.0",
+        "symfony/console": "^6.4 || ^7.0 || ^8.0",
+        "symfony/css-selector": "^6.4 || ^7.0 || ^8.0",
+        "symfony/dependency-injection": "^6.4 || ^7.0 || ^8.0",
+        "symfony/dom-crawler": "^6.4 || ^7.0 || ^8.0",
+        "symfony/http-client": "^6.4 || ^7.0 || ^8.0",
+        "symfony/http-foundation": "^6.4 || ^7.0 || ^8.0",
+        "symfony/http-kernel": "^6.4 || ^7.0 || ^8.0",
+        "symfony/lock": "^6.4 || ^7.0 || ^8.0",
+        "symfony/messenger": "^6.4 || ^7.0 || ^8.0"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.2",
+        "symfony/framework-bundle": "^6.4 || ^7.0 || ^8.0",
+        "symfony/phpunit-bridge": "^6.4 || ^7.0 || ^8.0",
+        "phpunit/phpunit": "^10.5 || ^11.5"
+    },
+    "suggest": {
+        "symfony/notifier": "To send alerts (Slack, email, ...) from a CrawlCompletedEvent listener.",
+        "symfony/scheduler": "To run periodic audits via a RecurringMessage, as shown in the README."
+    },
+    "autoload": {
+        "psr-4": {
+            "Lbonnet\\TechnicalSeoBundle\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Lbonnet\\TechnicalSeoBundle\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
