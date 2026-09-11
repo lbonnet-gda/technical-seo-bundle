@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Lbonnet\TechnicalSeoBundle\Crawler;
 
 use Lbonnet\CrawlerToolkit\Http\BoundedContentReader;
-use Lbonnet\CrawlerToolkit\Http\ThrottleExemptionInterface;
+use Lbonnet\CrawlerToolkit\Http\SiteThrottleExemption;
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxtCheckerInterface;
 use Lbonnet\TechnicalSeoBundle\Auditor\PageAuditorInterface;
 use Lbonnet\TechnicalSeoBundle\Auditor\SiteAuditorInterface;
@@ -81,18 +81,9 @@ final class SiteCrawler implements CrawlerInterface
         /** @var list<array{url: string, depth: int}> $queue */
         $queue = [['url' => $startUrl, 'depth' => 0]];
 
-        $startHost = parse_url($startUrl, PHP_URL_HOST);
-        $startHost = is_string($startHost) ? $startHost : null;
-        $throttle = null;
-
-        if ($startHost !== null && $this->httpClient instanceof ThrottleExemptionInterface) {
-            $throttle = $this->httpClient;
-
-            $crawlDelay = $this->robotsTxtChecker?->crawlDelay($startUrl);
-            $delayMs = $crawlDelay !== null ? (int)round($crawlDelay * 1000) : 0;
-
-            $throttle->setHostDelay($startHost, $delayMs);
-        }
+        $startKey = UrlResolver::dedupKey($startUrl);
+        $siteHost = self::hostOf($startUrl);
+        $throttleExemption = SiteThrottleExemption::begin($this->httpClient, $startUrl, $this->robotsTxtChecker);
 
         try {
             while (!empty($queue)) {
@@ -121,12 +112,21 @@ final class SiteCrawler implements CrawlerInterface
 
                     $finalUrl = $chain->finalUrl;
 
+                    if ($key === $startKey && $finalUrl !== null && $chain->endsSuccessfully()) {
+                        $finalHost = self::hostOf($finalUrl);
+
+                        if ($finalHost !== null && strcasecmp($finalHost, (string)$siteHost) !== 0) {
+                            $siteHost = $finalHost;
+                            $throttleExemption->moveTo($finalUrl);
+                        }
+                    }
+
                     if (
                         $finalUrl !== null
                         && !$chain->isLoop
                         && $chain->finalStatusCode !== null
                         && !isset($visited[UrlResolver::dedupKey($finalUrl)])
-                        && $this->isCrawlable($finalUrl, $startHost, $activeExcludePatterns)
+                        && $this->isCrawlable($finalUrl, $siteHost, $activeExcludePatterns)
                     ) {
                         $queue[] = ['url' => $finalUrl, 'depth' => $depth];
                     }
@@ -175,7 +175,7 @@ final class SiteCrawler implements CrawlerInterface
                 }
             }
         } finally {
-            $throttle?->setHostDelay(null);
+            $throttleExemption->end();
         }
 
         $pages = $this->siteAuditor->audit($pages, new CrawlContext($responses, $chains, $referrers));
@@ -241,22 +241,25 @@ final class SiteCrawler implements CrawlerInterface
     /**
      * @param list<string> $excludePatterns
      */
-    private function isCrawlable(string $url, ?string $startHost, array $excludePatterns): bool
+    private function isCrawlable(string $url, ?string $siteHost, array $excludePatterns): bool
     {
-        return $this->isInternal($url, $startHost)
+        return $this->isInternal($url, $siteHost)
             && !$this->isExcluded($url, $excludePatterns)
             && $this->robotsTxtChecker?->isAllowed($url) !== false;
     }
 
-    private function isInternal(string $url, ?string $startHost): bool
+    private function isInternal(string $url, ?string $siteHost): bool
     {
-        if ($startHost === null) {
-            return false;
-        }
+        $host = self::hostOf($url);
 
+        return $siteHost !== null && $host !== null && strcasecmp($host, $siteHost) === 0;
+    }
+
+    private static function hostOf(string $url): ?string
+    {
         $host = parse_url($url, PHP_URL_HOST);
 
-        return is_string($host) && strcasecmp($host, $startHost) === 0;
+        return is_string($host) ? $host : null;
     }
 
     /**

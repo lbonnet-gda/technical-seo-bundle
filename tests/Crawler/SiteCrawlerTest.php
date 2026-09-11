@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Lbonnet\TechnicalSeoBundle\Tests\Crawler;
 
+use Lbonnet\CrawlerToolkit\Http\ThrottleExemptionInterface;
 use Lbonnet\TechnicalSeoBundle\Auditor\PageAuditor;
 use Lbonnet\TechnicalSeoBundle\Auditor\SiteAuditor;
 use Lbonnet\TechnicalSeoBundle\Crawler\SiteCrawler;
@@ -23,6 +24,8 @@ use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\HttpClient\ResponseInterface;
+use Symfony\Contracts\HttpClient\ResponseStreamInterface;
 
 final class SiteCrawlerTest extends TestCase
 {
@@ -186,6 +189,86 @@ final class SiteCrawlerTest extends TestCase
         $this->assertSame(
             [IssueType::TemporaryRedirect, IssueType::RedirectToError],
             self::types($report->pages[1]->issues),
+        );
+    }
+
+    public function testFollowsTheSiteWhenTheStartUrlRedirectsToAnotherHost(): void
+    {
+        $httpClient = $this->siteWith([
+            'https://example.com/' => self::redirect('https://www.example.com/'),
+            'https://www.example.com/' => self::redirect('https://www.example.com/fr'),
+            'https://www.example.com/fr' => self::html('https://www.example.com/fr', '<a href="/fr/page">Page</a>'),
+            'https://www.example.com/fr/page' => self::html('https://www.example.com/fr/page'),
+        ]);
+
+        $report = $this->crawler($httpClient)->crawl('https://example.com');
+
+        $this->assertSame(2, $report->totalChecked);
+        $this->assertSame(
+            ['https://www.example.com/fr', 'https://www.example.com/fr/page', 'https://example.com'],
+            array_map(static fn(PageAudit $page): string => $page->url, $report->pages),
+        );
+        $this->assertSame([IssueType::RedirectChainTooLong], self::types($report->pages[2]->issues));
+    }
+
+    public function testDoesNotFollowAnInternalLinkThatRedirectsToAnotherHost(): void
+    {
+        $httpClient = $this->siteWith([
+            'https://example.com/' => self::html('https://example.com/', '<a href="/partner">Partner</a>'),
+            'https://example.com/partner' => self::redirect('https://partner.example.org/'),
+            'https://partner.example.org/' => self::html('https://partner.example.org/', '<a href="/deep">Deep</a>'),
+        ]);
+
+        $report = $this->crawler($httpClient)->crawl('https://example.com/');
+
+        $this->assertSame(1, $report->totalChecked);
+        $this->assertSame('https://example.com/', $report->pages[0]->url);
+    }
+
+    public function testMovesTheThrottleExemptionToWhereTheStartUrlRedirects(): void
+    {
+        $httpClient = new class($this->siteWith([
+            'https://example.com/' => self::redirect('https://www.example.com/'),
+            'https://www.example.com/' => self::html('https://www.example.com/'),
+        ])) implements HttpClientInterface, ThrottleExemptionInterface {
+            /** @var list<array{0: ?string, 1: int}> */
+            public array $hostDelayCalls = [];
+
+            public function __construct(private HttpClientInterface $inner)
+            {
+            }
+
+            public function setHostDelay(?string $host, int $delayMs = 0): void
+            {
+                $this->hostDelayCalls[] = [$host, $delayMs];
+            }
+
+            public function request(string $method, string $url, array $options = []): ResponseInterface
+            {
+                return $this->inner->request($method, $url, $options);
+            }
+
+            public function stream(
+                ResponseInterface|iterable $responses,
+                ?float $timeout = null
+            ): ResponseStreamInterface {
+                return $this->inner->stream($responses, $timeout);
+            }
+
+            public function withOptions(array $options): static
+            {
+                $clone = clone $this;
+                $clone->inner = $this->inner->withOptions($options);
+
+                return $clone;
+            }
+        };
+
+        $this->crawler($httpClient)->crawl('https://example.com');
+
+        $this->assertSame(
+            [['example.com', 0], ['www.example.com', 0], [null, 0]],
+            $httpClient->hostDelayCalls,
         );
     }
 
