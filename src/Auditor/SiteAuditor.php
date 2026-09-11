@@ -9,7 +9,9 @@ use Lbonnet\TechnicalSeoBundle\Model\CrawlContext;
 use Lbonnet\TechnicalSeoBundle\Model\Issue;
 use Lbonnet\TechnicalSeoBundle\Model\IssueType;
 use Lbonnet\TechnicalSeoBundle\Model\PageAudit;
+use Lbonnet\TechnicalSeoBundle\Model\PageResponse;
 use Lbonnet\TechnicalSeoBundle\Model\RedirectChain;
+use Lbonnet\TechnicalSeoBundle\Model\RedirectHop;
 use Lbonnet\TechnicalSeoBundle\Url\UrlResolver;
 
 final class SiteAuditor implements SiteAuditorInterface
@@ -38,43 +40,40 @@ final class SiteAuditor implements SiteAuditorInterface
     {
         $this->probe->reset();
 
+        /** @var array<string, PageAudit> $pagesByKey */
+        $pagesByKey = [];
+
+        foreach ($pages as $page) {
+            $pagesByKey[UrlResolver::dedupKey($page->url)] = $page;
+        }
+
         /** @var array<string, list<Issue>> $extraIssues dedup key of a page URL => issues to add */
         $extraIssues = [];
         /** @var list<PageAudit> $extraPages */
         $extraPages = [];
 
         foreach ($pages as $page) {
-            $issues = $this->auditCanonicalTarget($page, $context);
+            $issues = $this->auditCanonicalTarget($page, $context, $pagesByKey);
 
             if ($issues !== []) {
-                $key = UrlResolver::dedupKey($page->url);
-                $extraIssues[$key] = [...($extraIssues[$key] ?? []), ...$issues];
+                $extraIssues[UrlResolver::dedupKey($page->url)] = $issues;
             }
         }
 
         foreach ($context->redirectChains() as $chain) {
             $chainIssues = $this->auditRedirectChain($chain);
-            $referrers = $context->referrersOf($chain->startUrl);
 
-            if ($referrers === []) {
-                if ($chainIssues !== []) {
-                    $extraPages[] = new PageAudit(
-                        url: $chain->startUrl,
-                        statusCode: $chain->startStatusCode,
-                        issues: $chainIssues,
-                    );
-                }
-
-                continue;
+            if ($chainIssues !== []) {
+                $extraPages[] = new PageAudit(
+                    url: $chain->startUrl,
+                    statusCode: $chain->startStatusCode,
+                    issues: $chainIssues,
+                );
             }
 
-            foreach ($referrers as $referrerUrl) {
+            foreach ($context->referrersOf($chain->startUrl) as $referrerUrl) {
                 $key = UrlResolver::dedupKey($referrerUrl);
-                $extraIssues[$key] = [
-                    ...($extraIssues[$key] ?? []),
-                    $this->linkToRedirectIssue($chain),
-                    ...$chainIssues,
-                ];
+                $extraIssues[$key] = [...($extraIssues[$key] ?? []), $this->linkToRedirectIssue($chain)];
             }
         }
 
@@ -95,25 +94,15 @@ final class SiteAuditor implements SiteAuditorInterface
     }
 
     /**
+     * @param array<string, PageAudit> $pagesByKey
+     *
      * @return list<Issue>
      */
-    private function auditCanonicalTarget(PageAudit $page, CrawlContext $context): array
+    private function auditCanonicalTarget(PageAudit $page, CrawlContext $context, array $pagesByKey): array
     {
-        $signals = $page->signals;
+        $target = $page->signals?->canonicalElsewhere($page->url);
 
-        if ($signals === null) {
-            return [];
-        }
-
-        $href = $signals->effectiveCanonicalHref();
-
-        if ($href === null || $href === '') {
-            return [];
-        }
-
-        $target = UrlResolver::resolve($page->url, $href);
-
-        if ($target === null || UrlResolver::dedupKey($target) === UrlResolver::dedupKey($page->url)) {
+        if ($target === null) {
             return [];
         }
 
@@ -149,7 +138,76 @@ final class SiteAuditor implements SiteAuditorInterface
             ];
         }
 
-        return [];
+        $targetPage = $pagesByKey[UrlResolver::dedupKey($target)] ?? null;
+
+        return [
+            ...$this->auditCanonicalTargetNoindex($target, $response, $targetPage),
+            ...$this->auditCanonicalChain($page, $target, $targetPage),
+        ];
+    }
+
+    /**
+     * @return list<Issue>
+     */
+    private function auditCanonicalTargetNoindex(string $target, PageResponse $response, ?PageAudit $targetPage): array
+    {
+        $noindex = $response->headerRobotsDirectives()->hasNoindex()
+            || $targetPage?->signals?->metaRobotsDirectives()->hasNoindex() === true;
+
+        if (!$noindex) {
+            return [];
+        }
+
+        return [
+            new Issue(
+                IssueType::CanonicalTargetNoindex,
+                sprintf(
+                    'The canonical URL "%s" carries a noindex directive: '
+                    .'this page defers to a URL that refuses to be indexed.',
+                    $target,
+                ),
+            ),
+        ];
+    }
+
+    /**
+     * @return list<Issue>
+     */
+    private function auditCanonicalChain(PageAudit $page, string $target, ?PageAudit $targetPage): array
+    {
+        if ($targetPage === null) {
+            return [];
+        }
+
+        $nextTarget = $targetPage->signals?->canonicalElsewhere($targetPage->url);
+
+        if ($nextTarget === null) {
+            return [];
+        }
+
+        if (UrlResolver::dedupKey($nextTarget) === UrlResolver::dedupKey($page->url)) {
+            return [
+                new Issue(
+                    IssueType::CanonicalChain,
+                    sprintf(
+                        'The canonical URL "%s" points back to this page; the two pages cancel each other out.',
+                        $target,
+                    ),
+                ),
+            ];
+        }
+
+        return [
+            new Issue(
+                IssueType::CanonicalChain,
+                sprintf(
+                    'The canonical URL "%s" itself declares "%s" as canonical; '
+                    .'point this page straight at the final one.',
+                    $target,
+                    $nextTarget,
+                ),
+            ),
+        ];
     }
 
     /**
@@ -170,33 +228,76 @@ final class SiteAuditor implements SiteAuditorInterface
             ];
         }
 
+        $issues = [];
+
         if ($chain->hopCount() > $this->maxRedirectHops) {
-            return [
-                new Issue(
-                    IssueType::RedirectChainTooLong,
-                    sprintf(
-                        '"%s" goes through %d redirects%s before reaching "%s".',
-                        $chain->startUrl,
-                        $chain->hopCount(),
-                        $chain->truncated ? ' or more' : '',
-                        $chain->finalUrl ?? 'an unknown URL',
-                    ),
+            $issues[] = new Issue(
+                IssueType::RedirectChainTooLong,
+                sprintf(
+                    '"%s" goes through %d redirects%s before reaching "%s".',
+                    $chain->startUrl,
+                    $chain->hopCount(),
+                    $chain->truncated ? ' or more' : '',
+                    $chain->finalUrl ?? 'an unknown URL',
                 ),
-            ];
+            );
         }
 
-        return [];
+        $temporaryHops = $chain->temporaryHops();
+
+        if ($temporaryHops !== []) {
+            $issues[] = new Issue(
+                IssueType::TemporaryRedirect,
+                sprintf(
+                    'The redirect from "%s" is temporary (%s): search engines tend to keep the original URL indexed. '
+                    .'Use 301 or 308 if the move is permanent.',
+                    $chain->startUrl,
+                    implode(
+                        ', ',
+                        array_map(
+                            static fn(RedirectHop $hop): string => sprintf('%d at "%s"', $hop->statusCode, $hop->url),
+                            $temporaryHops,
+                        ),
+                    ),
+                ),
+            );
+        }
+
+        if ($chain->endsInError()) {
+            $issues[] = new Issue(
+                IssueType::RedirectToError,
+                sprintf(
+                    'The redirect from "%s" ends on "%s", which answers %d; fix the redirect target.',
+                    $chain->startUrl,
+                    (string)$chain->finalUrl,
+                    (int)$chain->finalStatusCode,
+                ),
+            );
+        }
+
+        return $issues;
     }
 
     private function linkToRedirectIssue(RedirectChain $chain): Issue
     {
+        if (!$chain->endsSuccessfully()) {
+            return new Issue(
+                IssueType::InternalLinkToRedirect,
+                sprintf(
+                    'This page links to "%s", which answers %d and never leads to a working page.',
+                    $chain->startUrl,
+                    $chain->startStatusCode,
+                ),
+            );
+        }
+
         return new Issue(
             IssueType::InternalLinkToRedirect,
             sprintf(
                 'This page links to "%s", which answers %d and redirects to "%s"; link to the final URL instead.',
                 $chain->startUrl,
                 $chain->startStatusCode,
-                $chain->finalUrl ?? 'an unknown URL',
+                (string)$chain->finalUrl,
             ),
         );
     }

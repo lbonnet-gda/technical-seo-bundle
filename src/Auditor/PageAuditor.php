@@ -101,6 +101,19 @@ final class PageAuditor implements PageAuditorInterface
             );
         }
 
+        $canonical = $signals->canonicalElsewhere($response->url);
+
+        if ($canonical !== null && ($meta->hasNoindex() || $header->hasNoindex())) {
+            $issues[] = new Issue(
+                IssueType::NoindexConflictsWithCanonical,
+                sprintf(
+                    'The page carries a noindex directive yet declares "%s" as its canonical; '
+                    .'the two signals contradict each other, keep only one.',
+                    $canonical,
+                ),
+            );
+        }
+
         return $issues;
     }
 

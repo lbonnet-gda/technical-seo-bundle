@@ -73,8 +73,7 @@ final class PageAuditorTest extends TestCase
     public function testDoesNotFlagNoindexOnTheStartUrl(): void
     {
         $issues = $this->audit(
-            new HeadSignals(canonicalHrefs: ['https://example.com/a'], metaRobots: ['noindex'], htmlLang: 'fr'),
-            depth: 0,
+            new HeadSignals(canonicalHrefs: ['https://example.com/a'], metaRobots: ['noindex'], htmlLang: 'fr')
         );
 
         $this->assertSame([], $issues);
@@ -138,6 +137,15 @@ final class PageAuditorTest extends TestCase
         );
 
         $this->assertSame([IssueType::MetaRefreshRedirect], self::types($issues));
+    }
+
+    public function testFlagsNoindexCombinedWithACanonicalElsewhere(): void
+    {
+        $issues = $this->audit(
+            new HeadSignals(canonicalHrefs: ['https://example.com/other'], metaRobots: ['noindex'], htmlLang: 'fr'),
+        );
+
+        $this->assertSame([IssueType::NoindexConflictsWithCanonical], self::types($issues));
     }
 
     public function testFlagsMissingHtmlLang(): void

@@ -12,14 +12,19 @@ enum IssueType: string
     case CanonicalRelative = 'canonical_relative';
     case CanonicalTargetNotOk = 'canonical_target_not_ok';
     case CanonicalTargetRedirects = 'canonical_target_redirects';
+    case CanonicalTargetNoindex = 'canonical_target_noindex';
+    case CanonicalChain = 'canonical_chain';
 
     // --- Indexing directives ---
     case NoindexOnLinkedPage = 'noindex_on_linked_page';
+    case NoindexConflictsWithCanonical = 'noindex_conflicts_with_canonical';
     case RobotsDirectiveConflict = 'robots_directive_conflict';
 
     // --- Redirects ---
     case RedirectLoop = 'redirect_loop';
+    case RedirectToError = 'redirect_to_error';
     case RedirectChainTooLong = 'redirect_chain_too_long';
+    case TemporaryRedirect = 'temporary_redirect';
     case InternalLinkToRedirect = 'internal_link_to_redirect';
     case MetaRefreshRedirect = 'meta_refresh_redirect';
 
@@ -33,12 +38,17 @@ enum IssueType: string
             self::CanonicalNotInHead,
             self::CanonicalTargetNotOk,
             self::CanonicalTargetRedirects,
+            self::CanonicalTargetNoindex,
             self::NoindexOnLinkedPage,
+            self::NoindexConflictsWithCanonical,
             self::RobotsDirectiveConflict,
-            self::RedirectLoop => Severity::Error,
+            self::RedirectLoop,
+            self::RedirectToError => Severity::Error,
 
             self::CanonicalRelative,
+            self::CanonicalChain,
             self::RedirectChainTooLong,
+            self::TemporaryRedirect,
             self::InternalLinkToRedirect,
             self::MetaRefreshRedirect,
             self::MissingHtmlLang => Severity::Warning,

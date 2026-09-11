@@ -40,29 +40,38 @@ Every issue carries a **severity**, and only `error` breaks a build by default (
 
 ### Canonical tags
 
-| Check                        | Severity | What it catches                                                                 |
-|------------------------------|----------|---------------------------------------------------------------------------------|
-| `canonical_multiple`         | error    | Several conflicting `<link rel="canonical">`: search engines ignore all of them |
-| `canonical_not_in_head`      | error    | A canonical outside `<head>` — usually an invalid element ending `<head>` early |
-| `canonical_target_not_ok`    | error    | The canonical URL answers 4xx/5xx                                               |
-| `canonical_target_redirects` | error    | The canonical URL answers 3xx instead of 200                                    |
-| `canonical_relative`         | warning  | A canonical href that is not an absolute URL (an empty href included)           |
+| Check                        | Severity | What it catches                                                                             |
+|------------------------------|----------|---------------------------------------------------------------------------------------------|
+| `canonical_multiple`         | error    | Several conflicting `<link rel="canonical">`: search engines ignore all of them             |
+| `canonical_not_in_head`      | error    | A canonical outside `<head>` — usually an invalid element ending `<head>` early             |
+| `canonical_target_not_ok`    | error    | The canonical URL answers 4xx/5xx                                                           |
+| `canonical_target_redirects` | error    | The canonical URL answers 3xx instead of 200                                                |
+| `canonical_target_noindex`   | error    | The canonical URL carries a `noindex` (meta tag, or `X-Robots-Tag` for an uncrawled target) |
+| `canonical_relative`         | warning  | A canonical href that is not an absolute URL (an empty href included)                       |
+| `canonical_chain`            | warning  | The canonical URL declares yet another canonical (A → B → C), or points back (A ↔ B)        |
 
 ### Indexing directives
 
-| Check                       | Severity | What it catches                                                           |
-|-----------------------------|----------|---------------------------------------------------------------------------|
-| `noindex_on_linked_page`    | error    | A page the site links to, but tells search engines not to index           |
-| `robots_directive_conflict` | error    | The `robots` meta tag and the `X-Robots-Tag` header contradict each other |
+| Check                              | Severity | What it catches                                                                      |
+|------------------------------------|----------|--------------------------------------------------------------------------------------|
+| `noindex_on_linked_page`           | error    | A page the site links to, but tells search engines not to index                      |
+| `noindex_conflicts_with_canonical` | error    | A `noindex` combined with a canonical pointing at another URL: contradictory signals |
+| `robots_directive_conflict`        | error    | The `robots` meta tag and the `X-Robots-Tag` header contradict each other            |
 
 ### Redirects
 
-| Check                       | Severity | What it catches                                               |
-|-----------------------------|----------|---------------------------------------------------------------|
-| `redirect_loop`             | error    | A chain that comes back to a URL it already visited           |
-| `redirect_chain_too_long`   | warning  | More hops than `max_redirect_hops` allows                     |
-| `internal_link_to_redirect` | warning  | An internal link pointing at a redirect instead of its target |
-| `meta_refresh_redirect`     | warning  | `<meta http-equiv="refresh">` used instead of a 301           |
+| Check                       | Severity | What it catches                                                                    |
+|-----------------------------|----------|------------------------------------------------------------------------------------|
+| `redirect_loop`             | error    | A chain that comes back to a URL it already visited                                |
+| `redirect_to_error`         | error    | A chain that ends on a 4xx/5xx                                                     |
+| `redirect_chain_too_long`   | warning  | More hops than `max_redirect_hops` allows                                          |
+| `temporary_redirect`        | warning  | A 302, 303 or 307 on the way: search engines tend to keep the original URL indexed |
+| `internal_link_to_redirect` | warning  | An internal link pointing at a redirect instead of its target                      |
+| `meta_refresh_redirect`     | warning  | `<meta http-equiv="refresh">` used instead of a 301                                |
+
+An issue about a redirect itself (`redirect_loop`, `redirect_to_error`, `redirect_chain_too_long`, `temporary_redirect`)
+is reported **once**, on the redirecting URL, however many pages link to it: that is where it gets fixed. Each linking
+page gets its own `internal_link_to_redirect` instead.
 
 ### Markup
 
@@ -72,7 +81,7 @@ Every issue carries a **severity**, and only `error` breaks a build by default (
 
 Broken links themselves are deliberately **not** reported here — that is what
 [link-checker-bundle](https://github.com/lbonnet-gda/link-checker-bundle) is for. A URL that answers 4xx is still
-recorded, so canonical targets can be checked against it.
+recorded, so canonical targets and redirect chains can be checked against it.
 
 ## Configuration
 

@@ -30,4 +30,22 @@ final class RedirectChain
     {
         return count($this->hops);
     }
+
+    public function endsSuccessfully(): bool
+    {
+        return $this->finalStatusCode !== null && $this->finalStatusCode >= 200 && $this->finalStatusCode < 300;
+    }
+
+    public function endsInError(): bool
+    {
+        return $this->finalStatusCode !== null && $this->finalStatusCode >= 400;
+    }
+
+    /**
+     * @return list<RedirectHop>
+     */
+    public function temporaryHops(): array
+    {
+        return array_values(array_filter($this->hops, static fn(RedirectHop $hop): bool => $hop->isTemporary()));
+    }
 }

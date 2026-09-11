@@ -151,10 +151,10 @@ final class SiteAuditorTest extends TestCase
 
         $audited = $this->auditor()->audit([$this->page('https://example.com/a')], $context);
 
-        $this->assertSame(
-            [IssueType::InternalLinkToRedirect, IssueType::RedirectChainTooLong],
-            self::types($audited[0]->issues),
-        );
+        $this->assertCount(2, $audited);
+        $this->assertSame([IssueType::InternalLinkToRedirect], self::types($audited[0]->issues));
+        $this->assertSame('https://example.com/old', $audited[1]->url);
+        $this->assertSame([IssueType::RedirectChainTooLong], self::types($audited[1]->issues));
     }
 
     public function testAChainNobodyLinksToBecomesItsOwnEntry(): void
@@ -213,6 +213,132 @@ final class SiteAuditorTest extends TestCase
         $this->assertSame([IssueType::CanonicalRelative], self::types($audited[0]->issues));
     }
 
+    public function testARedirectIssueIsReportedOnceHoweverManyPagesLinkToIt(): void
+    {
+        $chain = new RedirectChain(
+            'https://example.com/old',
+            Response::HTTP_MOVED_PERMANENTLY,
+            [new RedirectHop('https://example.com/old', Response::HTTP_MOVED_PERMANENTLY, 'https://example.com/gone')],
+            'https://example.com/gone',
+            Response::HTTP_NOT_FOUND,
+        );
+
+        $context = new CrawlContext(
+            redirectChains: ['https://example.com/old' => $chain],
+            referrers: ['https://example.com/old' => ['https://example.com/a', 'https://example.com/b']],
+        );
+
+        $audited = $this->auditor()->audit(
+            [$this->page('https://example.com/a'), $this->page('https://example.com/b')],
+            $context,
+        );
+
+        $this->assertCount(3, $audited);
+        $this->assertSame([IssueType::InternalLinkToRedirect], self::types($audited[0]->issues));
+        $this->assertSame([IssueType::InternalLinkToRedirect], self::types($audited[1]->issues));
+        $this->assertStringContainsString('never leads to a working page', $audited[0]->issues[0]->message);
+        $this->assertSame('https://example.com/old', $audited[2]->url);
+        $this->assertSame([IssueType::RedirectToError], self::types($audited[2]->issues));
+    }
+
+    public function testFlagsATemporaryRedirect(): void
+    {
+        $chain = new RedirectChain(
+            'https://example.com/',
+            Response::HTTP_FOUND,
+            [new RedirectHop('https://example.com/', Response::HTTP_FOUND, 'https://example.com/fr/')],
+            'https://example.com/fr/',
+            Response::HTTP_OK,
+        );
+
+        $audited = $this->auditor()->audit([], new CrawlContext(redirectChains: ['https://example.com/' => $chain]));
+
+        $this->assertSame([IssueType::TemporaryRedirect], self::types($audited[0]->issues));
+        $this->assertStringContainsString('302', $audited[0]->issues[0]->message);
+    }
+
+    public function testAPermanentRedirectIsNotTemporary(): void
+    {
+        $chain = new RedirectChain(
+            'https://example.com/',
+            Response::HTTP_PERMANENTLY_REDIRECT,
+            [new RedirectHop('https://example.com/', Response::HTTP_PERMANENTLY_REDIRECT, 'https://example.com/fr/')],
+            'https://example.com/fr/',
+            Response::HTTP_OK,
+        );
+
+        $audited = $this->auditor()->audit([], new CrawlContext(redirectChains: ['https://example.com/' => $chain]));
+
+        $this->assertSame([], $audited);
+    }
+
+    public function testFlagsACanonicalPointingToANoindexPage(): void
+    {
+        $pages = [
+            $this->page('https://example.com/a', canonical: 'https://example.com/b'),
+            $this->page('https://example.com/b', metaRobots: ['noindex']),
+        ];
+        $context = new CrawlContext(
+            responses: ['https://example.com/b' => new PageResponse('https://example.com/b', Response::HTTP_OK)],
+        );
+
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::CanonicalTargetNoindex], self::types($audited[0]->issues));
+        $this->assertSame([], $audited[1]->issues);
+    }
+
+    public function testFlagsACanonicalTargetNoindexedByItsHeader(): void
+    {
+        $probe = $this->createMock(TargetProbeInterface::class);
+        $probe->method('probe')->willReturn(
+            new PageResponse('https://example.com/b', Response::HTTP_OK, ['x-robots-tag' => ['noindex']]),
+        );
+
+        $pages = [$this->page('https://example.com/a', canonical: 'https://example.com/b')];
+
+        $audited = (new SiteAuditor($probe))->audit($pages, new CrawlContext());
+
+        $this->assertSame([IssueType::CanonicalTargetNoindex], self::types($audited[0]->issues));
+    }
+
+    public function testFlagsACanonicalChain(): void
+    {
+        $pages = [
+            $this->page('https://example.com/a', canonical: 'https://example.com/b'),
+            $this->page('https://example.com/b', canonical: 'https://example.com/c'),
+        ];
+        $context = new CrawlContext(
+            responses: ['https://example.com/b' => new PageResponse('https://example.com/b', Response::HTTP_OK)],
+        );
+
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::CanonicalChain], self::types($audited[0]->issues));
+        $this->assertStringContainsString('https://example.com/c', $audited[0]->issues[0]->message);
+        $this->assertSame([], $audited[1]->issues);
+    }
+
+    public function testFlagsTwoPagesDeclaringEachOtherCanonical(): void
+    {
+        $pages = [
+            $this->page('https://example.com/a', canonical: 'https://example.com/b'),
+            $this->page('https://example.com/b', canonical: 'https://example.com/a'),
+        ];
+        $context = new CrawlContext(
+            responses: [
+                'https://example.com/a' => new PageResponse('https://example.com/a', Response::HTTP_OK),
+                'https://example.com/b' => new PageResponse('https://example.com/b', Response::HTTP_OK),
+            ],
+        );
+
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::CanonicalChain], self::types($audited[0]->issues));
+        $this->assertSame([IssueType::CanonicalChain], self::types($audited[1]->issues));
+        $this->assertStringContainsString('points back', $audited[0]->issues[0]->message);
+    }
+
     private function auditor(): SiteAuditor
     {
         return new SiteAuditor($this->createMock(TargetProbeInterface::class));
@@ -220,14 +346,22 @@ final class SiteAuditorTest extends TestCase
 
     /**
      * @param list<Issue> $issues
+     * @param list<string> $metaRobots
      */
-    private function page(string $url, ?string $canonical = null, array $issues = []): PageAudit
-    {
+    private function page(
+        string $url,
+        ?string $canonical = null,
+        array $issues = [],
+        array $metaRobots = [],
+    ): PageAudit {
         return new PageAudit(
             url: $url,
             statusCode: Response::HTTP_OK,
             issues: $issues,
-            signals: new HeadSignals(canonicalHrefs: $canonical !== null ? [$canonical] : []),
+            signals: new HeadSignals(
+                canonicalHrefs: $canonical !== null ? [$canonical] : [],
+                metaRobots: $metaRobots,
+            ),
         );
     }
 

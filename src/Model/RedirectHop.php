@@ -4,8 +4,16 @@ declare(strict_types=1);
 
 namespace Lbonnet\TechnicalSeoBundle\Model;
 
+use Symfony\Component\HttpFoundation\Response;
+
 final class RedirectHop
 {
+    private const TEMPORARY_STATUS_CODES = [
+        Response::HTTP_FOUND,
+        Response::HTTP_SEE_OTHER,
+        Response::HTTP_TEMPORARY_REDIRECT,
+    ];
+
     /**
      * @param string $url the URL that answered with a redirect
      * @param int $statusCode the 3xx status it answered with
@@ -16,5 +24,10 @@ final class RedirectHop
         public readonly int $statusCode,
         public readonly string $location,
     ) {
+    }
+
+    public function isTemporary(): bool
+    {
+        return in_array($this->statusCode, self::TEMPORARY_STATUS_CODES, true);
     }
 }

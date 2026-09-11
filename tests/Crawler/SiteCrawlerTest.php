@@ -165,6 +165,30 @@ final class SiteCrawlerTest extends TestCase
         $this->assertSame(1, $report->totalChecked);
     }
 
+    public function testReportsABrokenTemporaryRedirectOnceOnTheRedirectItself(): void
+    {
+        $httpClient = $this->siteWith([
+            'https://example.com/' => self::html('https://example.com/', '<a href="/old">Old</a>'),
+            'https://example.com/old' => [
+                '',
+                [
+                    'http_code' => Response::HTTP_FOUND,
+                    'response_headers' => ['location' => 'https://example.com/gone'],
+                ],
+            ],
+        ]);
+
+        $report = $this->crawler($httpClient)->crawl('https://example.com/');
+
+        $this->assertSame(1, $report->totalChecked);
+        $this->assertSame([IssueType::InternalLinkToRedirect], self::types($report->pages[0]->issues));
+        $this->assertSame('https://example.com/old', $report->pages[1]->url);
+        $this->assertSame(
+            [IssueType::TemporaryRedirect, IssueType::RedirectToError],
+            self::types($report->pages[1]->issues),
+        );
+    }
+
     private function crawler(
         HttpClientInterface $httpClient,
         int $maxDepth = 3,

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Lbonnet\TechnicalSeoBundle\Model;
 
+use Lbonnet\TechnicalSeoBundle\Url\UrlResolver;
+
 final class HeadSignals
 {
     /**
@@ -30,5 +32,22 @@ final class HeadSignals
         $distinct = array_values(array_unique($this->canonicalHrefs));
 
         return count($distinct) === 1 ? $distinct[0] : null;
+    }
+
+    public function canonicalElsewhere(string $pageUrl): ?string
+    {
+        $href = $this->effectiveCanonicalHref();
+
+        if ($href === null || $href === '') {
+            return null;
+        }
+
+        $canonical = UrlResolver::resolve($pageUrl, $href);
+
+        if ($canonical === null || UrlResolver::dedupKey($canonical) === UrlResolver::dedupKey($pageUrl)) {
+            return null;
+        }
+
+        return $canonical;
     }
 }
