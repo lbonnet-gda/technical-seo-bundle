@@ -60,4 +60,22 @@ final class PageAudit
 
         return $count;
     }
+
+    public function canonicalElsewhere(): ?string
+    {
+        return $this->signals?->canonicalElsewhere($this->url);
+    }
+
+    /**
+     * @return array<string, string> dedup key => URL
+     */
+    public function hreflangUrls(): array
+    {
+        return $this->signals?->hreflangUrls($this->url) ?? [];
+    }
+
+    public function isCanonicalizedVariant(): bool
+    {
+        return $this->signals?->isCanonicalizedVariant($this->url) ?? false;
+    }
 }

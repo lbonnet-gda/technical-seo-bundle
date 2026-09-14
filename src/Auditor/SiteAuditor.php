@@ -48,7 +48,7 @@ final class SiteAuditor implements SiteAuditorInterface
         foreach ($pages as $page) {
             $key = UrlResolver::dedupKey($page->url);
             $pagesByKey[$key] = $page;
-            $hreflangUrlsByKey[$key] = $page->signals?->hreflangUrls($page->url) ?? [];
+            $hreflangUrlsByKey[$key] = $page->hreflangUrls();
         }
 
         /** @var array<string, list<Issue>> $extraIssues dedup key of a page URL => issues to add */
@@ -107,7 +107,7 @@ final class SiteAuditor implements SiteAuditorInterface
      */
     private function auditCanonicalTarget(PageAudit $page, CrawlContext $context, array $pagesByKey): array
     {
-        $target = $page->signals?->canonicalElsewhere($page->url);
+        $target = $page->canonicalElsewhere();
 
         if ($target === null) {
             return [];
@@ -186,7 +186,7 @@ final class SiteAuditor implements SiteAuditorInterface
             return [];
         }
 
-        $nextTarget = $targetPage->signals?->canonicalElsewhere($targetPage->url);
+        $nextTarget = $targetPage->canonicalElsewhere();
 
         if ($nextTarget === null) {
             return [];
@@ -229,7 +229,7 @@ final class SiteAuditor implements SiteAuditorInterface
         array $pagesByKey,
         array $hreflangUrlsByKey,
     ): array {
-        if ($page->signals === null || $page->signals->isCanonicalizedVariant($page->url)) {
+        if ($page->isCanonicalizedVariant()) {
             return [];
         }
 
@@ -270,9 +270,7 @@ final class SiteAuditor implements SiteAuditorInterface
             }
 
             $targetPage = $pagesByKey[$targetKey] ?? null;
-            $targetCanonical = $targetPage !== null
-                ? $targetPage->signals?->canonicalElsewhere($targetPage->url)
-                : null;
+            $targetCanonical = $targetPage?->canonicalElsewhere();
 
             if ($targetCanonical !== null) {
                 $issues[] = new Issue(
