@@ -5,22 +5,35 @@ declare(strict_types=1);
 /*
  * Regenerates src/Hreflang/IsoCodes.php from its reference sources:
  *
- *     php tools/generate-iso-codes.php [--iso-codes-ref=v4.16.0] [output-file]
+ *     php tools/generate-iso-codes.php [--iso-codes-ref=v4.20.1|latest] [--check] [output-file]
  *
  * - iso-codes (ISO 639-1 and ISO 3166-1) is read at a pinned tag, so regenerating reproduces the committed file. Pass a
- *   newer tag from https://salsa.debian.org/iso-codes-team/iso-codes/-/tags to pick up changes.
+ *   newer tag from https://salsa.debian.org/iso-codes-team/iso-codes/-/tags, or "latest", to pick up changes.
  * - The IANA Language Subtag Registry (ISO 639-1 and ISO 15924) has no tags: it is fetched as it currently is, and its
  *   File-Date ends up in the generated file.
+ *
+ * With --check, nothing is written: the codes the sources currently yield are compared with the ones in the file, and a
+ * Markdown report is printed. The exit code is 0 when they match, 3 when the file is outdated and 1 on any error.
  */
 
 const IANA_REGISTRY_URL = 'https://www.iana.org/assignments/language-subtag-registry/language-subtag-registry';
 const ISO_CODES_URL = 'https://salsa.debian.org/iso-codes-team/iso-codes/-/raw/%s/data/%s';
-const DEFAULT_ISO_CODES_REF = 'v4.16.0';
+const ISO_CODES_TAGS_URL = 'https://salsa.debian.org/api/v4/projects/iso-codes-team%2Fiso-codes/repository/tags'
+    .'?order_by=updated&sort=desc&per_page=100';
+const DEFAULT_ISO_CODES_REF = 'v4.20.1';
+const EXIT_OUTDATED = 3;
 
 $isoCodesRef = DEFAULT_ISO_CODES_REF;
 $output = __DIR__.'/../src/Hreflang/IsoCodes.php';
+$check = false;
 
 foreach (array_slice($argv, 1) as $argument) {
+    if ($argument === '--check') {
+        $check = true;
+
+        continue;
+    }
+
     if (str_starts_with($argument, '--iso-codes-ref=')) {
         $isoCodesRef = substr($argument, strlen('--iso-codes-ref='));
 
@@ -28,6 +41,10 @@ foreach (array_slice($argv, 1) as $argument) {
     }
 
     $output = $argument;
+}
+
+if ($isoCodesRef === 'latest') {
+    $isoCodesRef = latestIsoCodesTag();
 }
 
 $registry = parseIanaRegistry(fetch(IANA_REGISTRY_URL));
@@ -41,6 +58,17 @@ $scripts = sortedUnique($registry['scripts']);
 if ($languages === [] || $regions === [] || $scripts === []) {
     fwrite(STDERR, "A source came back empty; its format may have changed. Nothing was written.\n");
     exit(1);
+}
+
+if ($check) {
+    exit(
+    checkAgainst(
+        $output,
+        ['LANGUAGES' => $languages, 'REGIONS' => $regions, 'SCRIPTS' => $scripts],
+        $isoCodesRef,
+        $registry['fileDate'],
+    )
+    );
 }
 
 $php = <<<PHP
@@ -84,6 +112,97 @@ printf(
     $isoCodesRef,
     $registry['fileDate'],
 );
+
+/**
+ * Compares the codes the sources yield with the ones in the generated file, and prints a Markdown report.
+ *
+ * @param array<string, list<string>> $tables constant name => codes the sources currently yield
+ */
+function checkAgainst(string $file, array $tables, string $isoCodesRef, string $fileDate): int
+{
+    require $file;
+
+    $changes = [];
+
+    foreach ($tables as $name => $codes) {
+        $current = array_keys(constant('Lbonnet\\TechnicalSeoBundle\\Hreflang\\IsoCodes::'.$name));
+        $added = array_values(array_diff($codes, $current));
+        $removed = array_values(array_diff($current, $codes));
+
+        if ($added !== [] || $removed !== []) {
+            $changes[$name] = [$added, $removed];
+        }
+    }
+
+    if ($changes === []) {
+        printf("The ISO codes are up to date (iso-codes %s, IANA File-Date %s).\n", $isoCodesRef, $fileDate);
+
+        return 0;
+    }
+
+    printf(
+        "The ISO codes used to validate hreflang values are outdated (iso-codes %s, IANA File-Date %s):\n\n",
+        $isoCodesRef,
+        $fileDate,
+    );
+
+    foreach ($changes as $name => [$added, $removed]) {
+        $parts = [];
+
+        if ($added !== []) {
+            $parts[] = 'added '.formatCodes($added);
+        }
+
+        if ($removed !== []) {
+            $parts[] = 'removed '.formatCodes($removed);
+        }
+
+        printf("- `%s`: %s\n", $name, implode('; ', $parts));
+    }
+
+    echo "\n";
+
+    if ($isoCodesRef !== DEFAULT_ISO_CODES_REF) {
+        printf("Set `DEFAULT_ISO_CODES_REF` to `%s` in `tools/generate-iso-codes.php`, then run", $isoCodesRef);
+    } else {
+        echo 'Run';
+    }
+
+    echo " `php tools/generate-iso-codes.php` and commit the result.\n";
+
+    return EXIT_OUTDATED;
+}
+
+/**
+ * @param list<string> $codes
+ */
+function formatCodes(array $codes): string
+{
+    return implode(', ', array_map(static fn(string $code): string => "`$code`", $codes));
+}
+
+/**
+ * @throws JsonException
+ */
+function latestIsoCodesTag(): string
+{
+    $tags = json_decode(fetch(ISO_CODES_TAGS_URL), true, 512, JSON_THROW_ON_ERROR);
+    $releases = array_values(
+        array_filter(
+            array_column(is_array($tags) ? $tags : [], 'name'),
+            static fn(mixed $name): bool => is_string($name) && preg_match('/^v\d+\.\d+(\.\d+)?$/', $name) === 1,
+        )
+    );
+
+    if ($releases === []) {
+        fwrite(STDERR, "No release tag found for iso-codes.\n");
+        exit(1);
+    }
+
+    usort($releases, static fn(string $a, string $b): int => version_compare(substr($a, 1), substr($b, 1)));
+
+    return $releases[count($releases) - 1];
+}
 
 function fetch(string $url): string
 {
