@@ -55,6 +55,7 @@ final class HreflangValidatorTest extends TestCase
         yield 'underscore separator' => ['fr_FR', 'hyphen'];
         yield 'region alone' => ['us', 'region cannot be used on its own'];
         yield 'deprecated language code' => ['iw', 'ISO 639-1'];
+        yield 'code withdrawn from ISO 639-1' => ['bh', 'ISO 639-1'];
         yield 'unknown script' => ['zh-Qwer', 'ISO 15924'];
         yield 'too many subtags' => ['fr-FR-Paris', 'more subtags'];
         yield 'empty' => ['', 'empty'];
