@@ -75,19 +75,20 @@ page gets its own `internal_link_to_redirect` instead.
 
 ### hreflang
 
-| Check                         | Severity | What it catches                                                                                                                            |
-|-------------------------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `hreflang_invalid_code`       | error    | Not an ISO 639-1 language, with an optional ISO 15924 script and ISO 3166-1 alpha-2 region (`en-UK`, `es-419`, `fr_FR`, a region alone...) |
-| `hreflang_not_in_head`        | error    | hreflang links outside `<head>` — usually an invalid element ending `<head>` early                                                         |
-| `hreflang_relative_url`       | error    | An alternate URL that is not fully qualified                                                                                               |
-| `hreflang_conflicting_urls`   | error    | The same hreflang value declared for several URLs                                                                                          |
-| `hreflang_missing_self`       | error    | The page lists its alternates but not itself                                                                                               |
-| `hreflang_not_reciprocal`     | error    | A crawled alternate does not link back to the page, so both annotations are ignored                                                        |
-| `hreflang_target_not_ok`      | error    | An alternate answers 4xx/5xx                                                                                                               |
-| `hreflang_target_redirects`   | error    | An alternate answers 3xx instead of 200                                                                                                    |
-| `hreflang_target_noindex`     | error    | An alternate carries a `noindex` (meta tag, or `X-Robots-Tag` for an uncrawled alternate)                                                  |
-| `hreflang_canonical_mismatch` | error    | A page listing itself as a language version declares another URL as its canonical                                                          |
-| `hreflang_missing_x_default`  | notice   | No `x-default` fallback for unmatched languages                                                                                            |
+| Check                           | Severity | What it catches                                                                                                                            |
+|---------------------------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| `hreflang_invalid_code`         | error    | Not an ISO 639-1 language, with an optional ISO 15924 script and ISO 3166-1 alpha-2 region (`en-UK`, `es-419`, `fr_FR`, a region alone...) |
+| `hreflang_not_in_head`          | error    | hreflang links outside `<head>` — usually an invalid element ending `<head>` early                                                         |
+| `hreflang_relative_url`         | error    | An alternate URL that is not fully qualified                                                                                               |
+| `hreflang_conflicting_urls`     | error    | The same hreflang value declared for several URLs                                                                                          |
+| `hreflang_missing_self`         | error    | The page lists its alternates but not itself                                                                                               |
+| `hreflang_not_reciprocal`       | error    | A crawled alternate does not link back to the page, so both annotations are ignored                                                        |
+| `hreflang_target_not_ok`        | error    | An alternate answers 4xx/5xx                                                                                                               |
+| `hreflang_target_redirects`     | error    | An alternate answers 3xx instead of 200                                                                                                    |
+| `hreflang_target_not_canonical` | error    | A crawled alternate declares another URL as its canonical                                                                                  |
+| `hreflang_target_noindex`       | error    | An alternate carries a `noindex` (meta tag, or `X-Robots-Tag` for an uncrawled alternate)                                                  |
+| `hreflang_canonical_mismatch`   | error    | A page listing itself as a language version declares another URL as its canonical                                                          |
+| `hreflang_missing_x_default`    | notice   | No `x-default` fallback for unmatched languages                                                                                            |
 
 Every hreflang check concerns pages that declare `<link rel="alternate" hreflang>` tags, so a monolingual site gets none
 of them, with nothing to configure. Annotations sent through HTTP `Link` headers or XML sitemaps are not read.

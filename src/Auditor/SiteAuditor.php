@@ -270,6 +270,23 @@ final class SiteAuditor implements SiteAuditorInterface
             }
 
             $targetPage = $pagesByKey[$targetKey] ?? null;
+            $targetCanonical = $targetPage !== null
+                ? $targetPage->signals?->canonicalElsewhere($targetPage->url)
+                : null;
+
+            if ($targetCanonical !== null) {
+                $issues[] = new Issue(
+                    IssueType::HreflangTargetNotCanonical,
+                    sprintf(
+                        'The hreflang alternate "%s" is not a canonical URL (its canonical is "%s"); '
+                        .'point the annotation at the canonical URL.',
+                        $target,
+                        $targetCanonical,
+                    ),
+                );
+
+                continue;
+            }
 
             if (
                 $response->headerRobotsDirectives()->hasNoindex()

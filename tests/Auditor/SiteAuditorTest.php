@@ -463,6 +463,48 @@ final class SiteAuditorTest extends TestCase
         $this->assertSame([[], [], []], array_map(static fn(PageAudit $page): array => $page->issues, $audited));
     }
 
+    public function testFlagsAnHreflangAlternateThatIsNotCanonical(): void
+    {
+        $pages = [
+            $this->page(
+                'https://example.com/fr/presse',
+                hreflang: ['fr' => 'https://example.com/fr/presse', 'en' => 'https://example.com/en/presse?utm=x'],
+            ),
+            $this->page(
+                'https://example.com/en/presse?utm=x',
+                canonical: 'https://example.com/en/presse',
+                hreflang: ['en' => 'https://example.com/en/presse', 'fr' => 'https://example.com/fr/presse'],
+            ),
+        ];
+        $context = self::okResponses('https://example.com/fr/presse', 'https://example.com/en/presse?utm=x');
+
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::HreflangTargetNotCanonical], self::types($audited[0]->issues));
+        $this->assertStringContainsString('"https://example.com/en/presse"', $audited[0]->issues[0]->message);
+        $this->assertSame([], $audited[1]->issues);
+    }
+
+    public function testANonCanonicalAlternateIsNotAlsoCheckedForNoindexOrReciprocity(): void
+    {
+        $pages = [
+            $this->page(
+                'https://example.com/fr/presse',
+                hreflang: ['fr' => 'https://example.com/fr/presse', 'en' => 'https://example.com/en/presse?utm=x'],
+            ),
+            $this->page(
+                'https://example.com/en/presse?utm=x',
+                canonical: 'https://example.com/en/presse',
+                metaRobots: ['noindex'],
+            ),
+        ];
+        $context = self::okResponses('https://example.com/fr/presse', 'https://example.com/en/presse?utm=x');
+
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([IssueType::HreflangTargetNotCanonical], self::types($audited[0]->issues));
+    }
+
     private static function okResponses(string ...$urls): CrawlContext
     {
         $responses = [];

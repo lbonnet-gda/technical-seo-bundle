@@ -37,6 +37,7 @@ enum IssueType: string
     case HreflangNotReciprocal = 'hreflang_not_reciprocal';
     case HreflangTargetNotOk = 'hreflang_target_not_ok';
     case HreflangTargetRedirects = 'hreflang_target_redirects';
+    case HreflangTargetNotCanonical = 'hreflang_target_not_canonical';
     case HreflangTargetNoindex = 'hreflang_target_noindex';
     case HreflangCanonicalMismatch = 'hreflang_canonical_mismatch';
     case HreflangMissingXDefault = 'hreflang_missing_x_default';
@@ -65,6 +66,7 @@ enum IssueType: string
             self::HreflangNotReciprocal,
             self::HreflangTargetNotOk,
             self::HreflangTargetRedirects,
+            self::HreflangTargetNotCanonical,
             self::HreflangTargetNoindex,
             self::HreflangCanonicalMismatch => Severity::Error,
 
