@@ -432,6 +432,37 @@ final class SiteAuditorTest extends TestCase
         $this->assertSame([], $audited[0]->issues);
     }
 
+    public function testDoesNotAuditHreflangTargetsOfACanonicalizedVariant(): void
+    {
+        $cluster = ['en' => 'https://example.com/en/presse', 'fr' => 'https://example.com/fr/presse'];
+        $pages = [
+            $this->page(
+                'https://example.com/en/presse',
+                canonical: 'https://example.com/en/presse',
+                hreflang: $cluster,
+            ),
+            $this->page(
+                'https://example.com/fr/presse',
+                canonical: 'https://example.com/fr/presse',
+                hreflang: $cluster,
+            ),
+            $this->page(
+                'https://example.com/en/presse?categoryId=5',
+                canonical: 'https://example.com/en/presse',
+                hreflang: $cluster,
+            ),
+        ];
+        $context = self::okResponses(
+            'https://example.com/en/presse',
+            'https://example.com/fr/presse',
+            'https://example.com/en/presse?categoryId=5',
+        );
+
+        $audited = $this->auditor()->audit($pages, $context);
+
+        $this->assertSame([[], [], []], array_map(static fn(PageAudit $page): array => $page->issues, $audited));
+    }
+
     private static function okResponses(string ...$urls): CrawlContext
     {
         $responses = [];

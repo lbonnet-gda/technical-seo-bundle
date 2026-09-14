@@ -156,6 +156,10 @@ final class PageAuditor implements PageAuditorInterface
      */
     private function auditHreflang(PageResponse $response, HeadSignals $signals): array
     {
+        if ($signals->isCanonicalizedVariant($response->url)) {
+            return [];
+        }
+
         $issues = [];
 
         if ($signals->bodyHreflangLinks !== []) {
@@ -238,8 +242,8 @@ final class PageAuditor implements PageAuditorInterface
             $issues[] = new Issue(
                 IssueType::HreflangCanonicalMismatch,
                 sprintf(
-                    'The page declares hreflang alternates but its canonical is "%s"; '
-                    .'hreflang only works between canonical URLs.',
+                    'The page lists itself as a language version but declares "%s" as its canonical; a language '
+                    .'version must be its own canonical, or search engines may drop it in favor of that URL.',
                     $canonical,
                 ),
             );

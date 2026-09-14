@@ -254,6 +254,34 @@ final class PageAuditorTest extends TestCase
         $this->assertSame([IssueType::HreflangMissingXDefault], self::types($issues));
     }
 
+    public function testIgnoresHreflangOnACanonicalizedVariant(): void
+    {
+        $issues = $this->audit(
+            self::withHreflang(
+                [
+                    new HreflangLink('en', 'https://example.com/en/list'),
+                    new HreflangLink('fr', 'https://example.com/fr/list'),
+                ],
+                canonical: 'https://example.com/en/list',
+            )
+        );
+
+        $this->assertSame([], $issues);
+    }
+
+    public function testIgnoresHreflangOutsideHeadOnACanonicalizedVariant(): void
+    {
+        $issues = $this->audit(
+            new HeadSignals(
+                canonicalHrefs: ['https://example.com/en/list'],
+                htmlLang: 'fr',
+                bodyHreflangLinks: [new HreflangLink('en', 'https://example.com/en/list')],
+            )
+        );
+
+        $this->assertSame([], $issues);
+    }
+
     public function testFlagsHreflangOnANonCanonicalPage(): void
     {
         $issues = $this->audit(

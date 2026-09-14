@@ -229,6 +229,10 @@ final class SiteAuditor implements SiteAuditorInterface
         array $pagesByKey,
         array $hreflangUrlsByKey,
     ): array {
+        if ($page->signals === null || $page->signals->isCanonicalizedVariant($page->url)) {
+            return [];
+        }
+
         $pageKey = UrlResolver::dedupKey($page->url);
         $issues = [];
 
@@ -355,7 +359,7 @@ final class SiteAuditor implements SiteAuditorInterface
                 sprintf(
                     'The redirect from "%s" ends on "%s", which answers %d; fix the redirect target.',
                     $chain->startUrl,
-                    (string)$chain->finalUrl,
+                    $chain->finalUrl,
                     (int)$chain->finalStatusCode,
                 ),
             );
@@ -383,7 +387,7 @@ final class SiteAuditor implements SiteAuditorInterface
                 'This page links to "%s", which answers %d and redirects to "%s"; link to the final URL instead.',
                 $chain->startUrl,
                 $chain->startStatusCode,
-                (string)$chain->finalUrl,
+                $chain->finalUrl,
             ),
         );
     }

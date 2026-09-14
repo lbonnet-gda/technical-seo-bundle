@@ -72,4 +72,10 @@ final class HeadSignals
 
         return $urls;
     }
+
+    public function isCanonicalizedVariant(string $pageUrl): bool
+    {
+        return $this->canonicalElsewhere($pageUrl) !== null
+            && !isset($this->hreflangUrls($pageUrl)[UrlResolver::dedupKey($pageUrl)]);
+    }
 }

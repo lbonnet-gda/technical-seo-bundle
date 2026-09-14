@@ -297,6 +297,28 @@ final class SiteCrawlerTest extends TestCase
         $this->assertSame([], $report->pages[1]->issues);
     }
 
+    public function testAFilteredVariantOfAMultilingualPageRaisesNoHreflangIssue(): void
+    {
+        $cluster = '<link rel="alternate" hreflang="en" href="https://example.com/en/presse">'
+            .'<link rel="alternate" hreflang="fr" href="https://example.com/fr/presse">'
+            .'<link rel="alternate" hreflang="x-default" href="https://example.com/en/presse">';
+
+        $httpClient = $this->siteWith([
+            'https://example.com/en/presse' => self::html(
+                'https://example.com/en/presse',
+                '<a href="/en/presse?categoryId=5">Category</a><a href="/fr/presse">Français</a>',
+                $cluster,
+            ),
+            'https://example.com/en/presse?categoryId=5' => self::html('https://example.com/en/presse', '', $cluster),
+            'https://example.com/fr/presse' => self::html('https://example.com/fr/presse', '', $cluster),
+        ]);
+
+        $report = $this->crawler($httpClient)->crawl('https://example.com/en/presse');
+
+        $this->assertSame(3, $report->totalChecked);
+        $this->assertFalse($report->hasIssues());
+    }
+
     private function crawler(
         HttpClientInterface $httpClient,
         int $maxDepth = 3,

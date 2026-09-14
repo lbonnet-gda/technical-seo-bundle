@@ -65,7 +65,8 @@ enum IssueType: string
             self::HreflangNotReciprocal,
             self::HreflangTargetNotOk,
             self::HreflangTargetRedirects,
-            self::HreflangTargetNoindex => Severity::Error,
+            self::HreflangTargetNoindex,
+            self::HreflangCanonicalMismatch => Severity::Error,
 
             self::CanonicalRelative,
             self::CanonicalChain,
@@ -73,7 +74,6 @@ enum IssueType: string
             self::TemporaryRedirect,
             self::InternalLinkToRedirect,
             self::MetaRefreshRedirect,
-            self::HreflangCanonicalMismatch,
             self::MissingHtmlLang => Severity::Warning,
 
             self::HreflangMissingXDefault => Severity::Notice,

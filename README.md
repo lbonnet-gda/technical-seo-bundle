@@ -86,11 +86,15 @@ page gets its own `internal_link_to_redirect` instead.
 | `hreflang_target_not_ok`      | error    | An alternate answers 4xx/5xx                                                                                                               |
 | `hreflang_target_redirects`   | error    | An alternate answers 3xx instead of 200                                                                                                    |
 | `hreflang_target_noindex`     | error    | An alternate carries a `noindex` (meta tag, or `X-Robots-Tag` for an uncrawled alternate)                                                  |
-| `hreflang_canonical_mismatch` | warning  | A page declaring hreflang has a canonical pointing elsewhere: hreflang only works between canonical URLs                                   |
+| `hreflang_canonical_mismatch` | error    | A page listing itself as a language version declares another URL as its canonical                                                          |
 | `hreflang_missing_x_default`  | notice   | No `x-default` fallback for unmatched languages                                                                                            |
 
 Every hreflang check concerns pages that declare `<link rel="alternate" hreflang>` tags, so a monolingual site gets none
 of them, with nothing to configure. Annotations sent through HTTP `Link` headers or XML sitemaps are not read.
+
+A page whose canonical points to another URL and that does not list itself among its alternates, like a filtered or
+paginated listing reusing the template's tags, is not audited for hreflang: search engines fold it into its canonical
+and ignore its annotations.
 
 ### Markup
 
