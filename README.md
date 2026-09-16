@@ -150,6 +150,7 @@ Create `config/packages/technical_seo.yaml`:
 technical_seo:
     base_url: 'https://example.com' # default site to crawl
     max_depth: 3 # crawl depth from the start URL
+    max_pages: 500 # pages audited per crawl before stopping; the report is then marked as truncated (0 = no limit)
     timeout: 10 # per-request timeout (seconds)
     user_agent: 'Mozilla/5.0 (compatible; TechnicalSeoBundle/1.0; +https://github.com/lbonnet-gda/technical-seo-bundle)'
     exclude_patterns: # URLs matching these regexes are skipped
@@ -179,7 +180,7 @@ instead of silently disabling nothing.
 ### 1. Console Command (CLI & CI)
 
 ```bash
-php bin/console technical-seo:check [url] [--max-depth=N] [--exclude=PATTERN ...] [--fail-on=error|warning|notice]
+php bin/console technical-seo:check [url] [--max-depth=N] [--max-pages=N] [--exclude=PATTERN ...] [--fail-on=error|warning|notice]
 ```
 
 The `url` argument is optional if `technical_seo.base_url` is configured.
@@ -204,6 +205,7 @@ public function triggerAudit(MessageBusInterface $bus): void
         startUrl: 'https://example.com/blog',
         maxDepth: 2,
         excludePatterns: ['#/preview#'],
+        maxPages: 100,
     ));
 }
 ```
@@ -285,6 +287,7 @@ Unless `storage_dir` is disabled, each crawl is stored as JSON:
     "createdAt": "2026-09-09T03:00:12+00:00",
     "totalChecked": 128,
     "totalDuration": 41.7,
+    "truncated": false,
     "issuesCount": 6,
     "issuesBySeverity": {
         "error": 2,

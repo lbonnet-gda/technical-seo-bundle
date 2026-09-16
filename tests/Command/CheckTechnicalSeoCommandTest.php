@@ -45,6 +45,20 @@ final class CheckTechnicalSeoCommandTest extends TestCase
         $this->assertStringContainsString('All clear!', $tester->getDisplay());
     }
 
+    public function testItPassesMaxPagesAndWarnsAboutATruncatedReport(): void
+    {
+        $crawler = $this->createMock(CrawlerInterface::class);
+        $crawler->expects($this->once())
+            ->method('crawl')
+            ->with($this->anything(), $this->anything(), $this->anything(), $this->anything(), 25)
+            ->willReturn(new TechnicalSeoReport('https://example.com', [], 25, 1.5, truncated: true));
+
+        $tester = new CommandTester(new CheckTechnicalSeoCommand($crawler, defaultBaseUrl: 'https://example.com'));
+
+        $this->assertSame(Command::SUCCESS, $tester->execute(['--max-pages' => '25']));
+        $this->assertStringContainsString('Stopped after 25 page(s)', $tester->getDisplay());
+    }
+
     public function testItFailsOnAnErrorLevelIssue(): void
     {
         $tester = $this->tester($this->reportWith(IssueType::CanonicalMultiple));

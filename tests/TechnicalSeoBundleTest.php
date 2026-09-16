@@ -38,6 +38,7 @@ final class TechnicalSeoBundleTest extends TestCase
 
         $this->assertNull($container->getParameter('technical_seo.base_url'));
         $this->assertSame(3, $container->getParameter('technical_seo.max_depth'));
+        $this->assertSame(500, $container->getParameter('technical_seo.max_pages'));
         $this->assertSame(10, $container->getParameter('technical_seo.timeout'));
         $this->assertSame(SiteCrawler::DEFAULT_USER_AGENT, $container->getParameter('technical_seo.user_agent'));
         $this->assertSame([], $container->getParameter('technical_seo.exclude_patterns'));
@@ -90,6 +91,7 @@ final class TechnicalSeoBundleTest extends TestCase
             'technical_seo' => [
                 'base_url' => 'https://example.com',
                 'max_depth' => 5,
+                'max_pages' => 0,
                 'max_redirect_hops' => 0,
                 'resolve_external_targets' => false,
                 'fail_on' => 'warning',
@@ -102,6 +104,7 @@ final class TechnicalSeoBundleTest extends TestCase
 
         $this->assertSame('https://example.com', $container->getParameter('technical_seo.base_url'));
         $this->assertSame(5, $container->getParameter('technical_seo.max_depth'));
+        $this->assertSame(0, $container->getParameter('technical_seo.max_pages'));
         $this->assertSame(0, $container->getParameter('technical_seo.max_redirect_hops'));
         $this->assertFalse($container->getParameter('technical_seo.resolve_external_targets'));
         $this->assertSame('warning', $container->getParameter('technical_seo.fail_on'));
