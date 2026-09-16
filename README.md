@@ -69,7 +69,9 @@ Every issue carries a **severity**, and only `error` breaks a build by default (
 
 These checks read `robots.txt` the way Google does and evaluate its rules for Googlebot, whatever user agent the crawler
 sends, and whatever `respect_robots_txt` says. A problem with the file itself is reported once, on its URL. A blocked
-canonical target or hreflang alternate is not checked any further, since Google cannot read it anyway.
+canonical target or hreflang alternate is not checked any further, since Google cannot read it anyway. For a target on a
+host the crawl did not visit, fetching its `robots.txt` is an extra request: it only happens with
+`resolve_external_targets` enabled, and counts towards `max_external_target_checks`.
 
 ### Redirects
 
@@ -135,8 +137,8 @@ technical_seo:
         - '#\.pdf$#'
 
     max_redirect_hops: 1 # how many redirects a URL may go through before the chain is reported
-    resolve_external_targets: true # request canonical and hreflang targets the crawl did not visit, to check they answer 200
-    max_external_target_checks: 200 # cap on those extra requests per crawl (0 = unlimited)
+    resolve_external_targets: true # request canonical and hreflang targets the crawl did not visit (and their host's robots.txt)
+    max_external_target_checks: 200 # cap on those extra requests per crawl, robots.txt included (0 = unlimited)
 
     fail_on: 'error' # lowest severity that makes the command exit non-zero: error, warning or notice
     disabled_checks: [ ] # issue types to leave out entirely, e.g. ['internal_link_to_redirect']

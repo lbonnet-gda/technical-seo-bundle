@@ -66,7 +66,7 @@ final class TechnicalSeoBundle extends AbstractBundle
         $children->booleanNode('resolve_external_targets')
             ->defaultTrue()
             ->info(
-                'Request canonical and hreflang targets that the crawl did not already visit, to check whether they answer 200. Disable to keep the audit strictly within the pages that were crawled.'
+                'Request canonical and hreflang targets that the crawl did not already visit, to check whether they answer 200, and the robots.txt of their host when it was not crawled. Disable to keep the audit strictly within the pages that were crawled.'
             )
             ->end();
 
@@ -74,7 +74,7 @@ final class TechnicalSeoBundle extends AbstractBundle
             ->defaultValue(200)
             ->min(0)
             ->info(
-                'Maximum number of such extra requests per crawl (0 = unlimited). Targets beyond that budget are simply not reported on.'
+                'Maximum number of such extra requests per crawl, robots.txt files included (0 = unlimited). Targets beyond that budget are simply not reported on.'
             )
             ->end();
 
