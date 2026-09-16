@@ -7,6 +7,7 @@ namespace Lbonnet\TechnicalSeoBundle\Tests;
 use Lbonnet\CrawlerToolkit\Http\ThrottledHttpClient;
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxtChecker;
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxtCheckerInterface;
+use Lbonnet\CrawlerToolkit\Robots\RobotsTxtProviderInterface;
 use Lbonnet\TechnicalSeoBundle\Auditor\PageAuditor;
 use Lbonnet\TechnicalSeoBundle\Auditor\SiteAuditor;
 use Lbonnet\TechnicalSeoBundle\Command\CheckTechnicalSeoCommand;
@@ -125,6 +126,7 @@ final class TechnicalSeoBundleTest extends TestCase
                 TargetProbeInterface::class,
                 ReportStorageInterface::class,
                 RobotsTxtCheckerInterface::class,
+                RobotsTxtProviderInterface::class,
             ] as $alias
         ) {
             $this->assertTrue(

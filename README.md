@@ -58,6 +58,19 @@ Every issue carries a **severity**, and only `error` breaks a build by default (
 | `noindex_conflicts_with_canonical` | error    | A `noindex` combined with a canonical pointing at another URL: contradictory signals |
 | `robots_directive_conflict`        | error    | The `robots` meta tag and the `X-Robots-Tag` header contradict each other            |
 
+### robots.txt
+
+| Check                                  | Severity | What it catches                                                                                                   |
+|----------------------------------------|----------|-------------------------------------------------------------------------------------------------------------------|
+| `robots_txt_server_error`              | error    | `robots.txt` answers 5xx or 429, or cannot be fetched at all (timeout, DNS): Google stops crawling the whole site |
+| `robots_txt_disallow_all`              | error    | `robots.txt` blocks Googlebot from the site root                                                                  |
+| `robots_txt_blocks_canonical_target`   | error    | A canonical URL is blocked for Googlebot                                                                          |
+| `robots_txt_blocks_hreflang_alternate` | error    | An hreflang alternate is blocked for Googlebot                                                                    |
+
+These checks read `robots.txt` the way Google does and evaluate its rules for Googlebot, whatever user agent the crawler
+sends, and whatever `respect_robots_txt` says. A problem with the file itself is reported once, on its URL. A blocked
+canonical target or hreflang alternate is not checked any further, since Google cannot read it anyway.
+
 ### Redirects
 
 | Check                       | Severity | What it catches                                                                    |

@@ -20,6 +20,12 @@ enum IssueType: string
     case NoindexConflictsWithCanonical = 'noindex_conflicts_with_canonical';
     case RobotsDirectiveConflict = 'robots_directive_conflict';
 
+    // --- robots.txt ---
+    case RobotsTxtServerError = 'robots_txt_server_error';
+    case RobotsTxtDisallowAll = 'robots_txt_disallow_all';
+    case RobotsTxtBlocksCanonicalTarget = 'robots_txt_blocks_canonical_target';
+    case RobotsTxtBlocksHreflangAlternate = 'robots_txt_blocks_hreflang_alternate';
+
     // --- Redirects ---
     case RedirectLoop = 'redirect_loop';
     case RedirectToError = 'redirect_to_error';
@@ -56,6 +62,10 @@ enum IssueType: string
             self::NoindexOnLinkedPage,
             self::NoindexConflictsWithCanonical,
             self::RobotsDirectiveConflict,
+            self::RobotsTxtServerError,
+            self::RobotsTxtDisallowAll,
+            self::RobotsTxtBlocksCanonicalTarget,
+            self::RobotsTxtBlocksHreflangAlternate,
             self::RedirectLoop,
             self::RedirectToError,
             self::HreflangInvalidCode,

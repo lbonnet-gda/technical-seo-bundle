@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Lbonnet\TechnicalSeoBundle\Tests\Auditor;
 
+use Lbonnet\CrawlerToolkit\Robots\RobotsTxt;
+use Lbonnet\CrawlerToolkit\Robots\RobotsTxtProviderInterface;
 use Lbonnet\TechnicalSeoBundle\Auditor\SiteAuditor;
 use Lbonnet\TechnicalSeoBundle\Http\TargetProbeInterface;
 use Lbonnet\TechnicalSeoBundle\Model\CrawlContext;
@@ -503,6 +505,132 @@ final class SiteAuditorTest extends TestCase
         $audited = $this->auditor()->audit($pages, $context);
 
         $this->assertSame([IssueType::HreflangTargetNotCanonical], self::types($audited[0]->issues));
+    }
+
+    public function testReportsARobotsTxtServerErrorOnceForTheWholeSite(): void
+    {
+        $auditor = $this->auditorWithRobotsTxt([
+            'example.com' => RobotsTxt::serverError(
+                'https://example.com/robots.txt',
+                Response::HTTP_SERVICE_UNAVAILABLE,
+            ),
+        ]);
+
+        $audited = $auditor->audit(
+            [$this->page('https://example.com/a'), $this->page('https://example.com/b')],
+            new CrawlContext(),
+        );
+
+        $this->assertCount(3, $audited);
+        $this->assertSame([], $audited[0]->issues);
+        $this->assertSame([], $audited[1]->issues);
+        $this->assertSame('https://example.com/robots.txt', $audited[2]->url);
+        $this->assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $audited[2]->statusCode);
+        $this->assertSame([IssueType::RobotsTxtServerError], self::types($audited[2]->issues));
+    }
+
+    public function testReportsARobotsTxtThatCannotBeFetchedAtAll(): void
+    {
+        $auditor = $this->auditorWithRobotsTxt([
+            'example.com' => RobotsTxt::serverError('https://example.com/robots.txt', null),
+        ]);
+
+        $audited = $auditor->audit([$this->page('https://example.com/a')], new CrawlContext());
+
+        $this->assertSame([IssueType::RobotsTxtServerError], self::types($audited[1]->issues));
+        $this->assertStringContainsString('could not be fetched', $audited[1]->issues[0]->message);
+    }
+
+    public function testFlagsARobotsTxtBlockingGooglebotFromTheSiteRoot(): void
+    {
+        foreach (["User-agent: *\nDisallow: /\n", "User-agent: Googlebot\nDisallow: /\n"] as $content) {
+            $auditor = $this->auditorWithRobotsTxt(['example.com' => self::robotsTxt('example.com', $content)]);
+
+            $audited = $auditor->audit([$this->page('https://example.com/a')], new CrawlContext());
+
+            $this->assertCount(2, $audited, $content);
+            $this->assertSame([IssueType::RobotsTxtDisallowAll], self::types($audited[1]->issues), $content);
+        }
+    }
+
+    public function testARobotsTxtBlockingAnotherCrawlerOrMissingIsFine(): void
+    {
+        foreach (
+            [
+                self::robotsTxt('example.com', "User-agent: OtherBot\nDisallow: /\n"),
+                RobotsTxt::notFound('https://example.com/robots.txt', Response::HTTP_NOT_FOUND),
+            ] as $robotsTxt
+        ) {
+            $auditor = $this->auditorWithRobotsTxt(['example.com' => $robotsTxt]);
+
+            $audited = $auditor->audit([$this->page('https://example.com/a')], new CrawlContext());
+
+            $this->assertCount(1, $audited);
+            $this->assertSame([], $audited[0]->issues);
+        }
+    }
+
+    public function testFlagsACanonicalTargetBlockedForGooglebotWithoutRequestingIt(): void
+    {
+        $probe = $this->createMock(TargetProbeInterface::class);
+        $probe->expects($this->never())->method('probe');
+
+        $auditor = $this->auditorWithRobotsTxt(
+            ['example.com' => self::robotsTxt('example.com', "User-agent: *\nDisallow: /private\n")],
+            $probe,
+        );
+
+        $audited = $auditor->audit(
+            [$this->page('https://example.com/a', canonical: 'https://example.com/private/b')],
+            new CrawlContext(),
+        );
+
+        $this->assertCount(1, $audited);
+        $this->assertSame([IssueType::RobotsTxtBlocksCanonicalTarget], self::types($audited[0]->issues));
+    }
+
+    public function testFlagsAnHreflangAlternateBlockedForGooglebot(): void
+    {
+        $probe = $this->createMock(TargetProbeInterface::class);
+        $probe->expects($this->never())->method('probe');
+
+        $auditor = $this->auditorWithRobotsTxt(
+            ['example.com' => self::robotsTxt('example.com', "User-agent: *\nDisallow: /private\n")],
+            $probe,
+        );
+
+        $audited = $auditor->audit(
+            [
+                $this->page(
+                    'https://example.com/fr',
+                    hreflang: ['fr' => 'https://example.com/fr', 'en' => 'https://example.com/private/en'],
+                ),
+            ],
+            new CrawlContext(),
+        );
+
+        $this->assertSame([IssueType::RobotsTxtBlocksHreflangAlternate], self::types($audited[0]->issues));
+    }
+
+    /**
+     * @param array<string, RobotsTxt> $robotsTxtByHost
+     */
+    private function auditorWithRobotsTxt(array $robotsTxtByHost, ?TargetProbeInterface $probe = null): SiteAuditor
+    {
+        $provider = $this->createMock(RobotsTxtProviderInterface::class);
+        $provider->method('robotsTxt')->willReturnCallback(
+            static fn(string $url): ?RobotsTxt => $robotsTxtByHost[(string)parse_url($url, PHP_URL_HOST)] ?? null,
+        );
+
+        return new SiteAuditor(
+            $probe ?? $this->createMock(TargetProbeInterface::class),
+            robotsTxtProvider: $provider,
+        );
+    }
+
+    private static function robotsTxt(string $host, string $content): RobotsTxt
+    {
+        return RobotsTxt::parse("https://$host/robots.txt", $content, Response::HTTP_OK);
     }
 
     private static function okResponses(string ...$urls): CrawlContext
