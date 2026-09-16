@@ -47,6 +47,14 @@ final class UrlResolverTest extends TestCase
         $this->assertFalse(UrlResolver::isAbsoluteHttpUrl(''));
     }
 
+    public function testIsSameUrl(): void
+    {
+        $this->assertTrue(UrlResolver::isSameUrl('https://Example.com', 'HTTPS://example.com/'));
+        $this->assertFalse(UrlResolver::isSameUrl('http://example.com/', 'https://example.com/'));
+        $this->assertFalse(UrlResolver::isSameUrl('https://example.com/a', 'https://example.com/a/'));
+        $this->assertFalse(UrlResolver::isSameUrl('https://example.com/a', 'https://example.com/A'));
+    }
+
     /**
      * @dataProvider dedupKeyProvider
      */

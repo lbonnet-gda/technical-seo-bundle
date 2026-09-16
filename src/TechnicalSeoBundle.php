@@ -78,6 +78,14 @@ final class TechnicalSeoBundle extends AbstractBundle
             )
             ->end();
 
+        $children->integerNode('url_variants_sample_size')
+            ->defaultValue(10)
+            ->min(0)
+            ->info(
+                'How many crawled pages, shallowest first, to request again with their trailing slash toggled and their letter case changed, to catch duplicate URLs. The http://, www/apex and index file versions of the home page are always checked. Set to 0 to skip the per-page checks.'
+            )
+            ->end();
+
         $children->enumNode('fail_on')
             ->values([Severity::Error->value, Severity::Warning->value, Severity::Notice->value])
             ->defaultValue(Severity::Error->value)
@@ -141,6 +149,7 @@ final class TechnicalSeoBundle extends AbstractBundle
      *     max_redirect_hops: int,
      *     resolve_external_targets: bool,
      *     max_external_target_checks: int,
+     *     url_variants_sample_size: int,
      *     fail_on: string,
      *     disabled_checks: list<string>,
      *     storage_dir: string|null,
@@ -163,6 +172,7 @@ final class TechnicalSeoBundle extends AbstractBundle
             ->set('technical_seo.max_redirect_hops', $config['max_redirect_hops'])
             ->set('technical_seo.resolve_external_targets', $config['resolve_external_targets'])
             ->set('technical_seo.max_external_target_checks', $config['max_external_target_checks'])
+            ->set('technical_seo.url_variants_sample_size', $config['url_variants_sample_size'])
             ->set('technical_seo.fail_on', $config['fail_on'])
             ->set('technical_seo.disabled_checks', $config['disabled_checks'])
             ->set('technical_seo.storage_dir', $config['storage_dir'])

@@ -80,6 +80,12 @@ final class UrlResolver
         );
     }
 
+    public static function isSameUrl(string $url, string $otherUrl): bool
+    {
+        return strcasecmp((string)parse_url($url, PHP_URL_SCHEME), (string)parse_url($otherUrl, PHP_URL_SCHEME)) === 0
+            && self::dedupKey($url) === self::dedupKey($otherUrl);
+    }
+
     private static function normalizePath(string $path): string
     {
         $queryPosition = strpos($path, '?');

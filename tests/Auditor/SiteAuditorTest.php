@@ -7,6 +7,7 @@ namespace Lbonnet\TechnicalSeoBundle\Tests\Auditor;
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxt;
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxtProviderInterface;
 use Lbonnet\TechnicalSeoBundle\Auditor\SiteAuditor;
+use Lbonnet\TechnicalSeoBundle\Auditor\UrlVariantAuditorInterface;
 use Lbonnet\TechnicalSeoBundle\Http\TargetProbeInterface;
 use Lbonnet\TechnicalSeoBundle\Model\CrawlContext;
 use Lbonnet\TechnicalSeoBundle\Model\HeadSignals;
@@ -610,6 +611,45 @@ final class SiteAuditorTest extends TestCase
         );
 
         $this->assertSame([IssueType::RobotsTxtBlocksHreflangAlternate], self::types($audited[0]->issues));
+    }
+
+    public function testMergesUrlVariantIssuesIntoTheCrawledPageTheyConcern(): void
+    {
+        $variantAuditor = $this->createMock(UrlVariantAuditorInterface::class);
+        $variantAuditor->method('audit')->willReturn([
+            new PageAudit(
+                url: 'https://example.com/a/',
+                statusCode: Response::HTTP_OK,
+                issues: [new Issue(IssueType::TrailingSlashDuplicate, 'slash')],
+            ),
+            new PageAudit(
+                url: 'http://example.com/',
+                statusCode: Response::HTTP_OK,
+                issues: [new Issue(IssueType::HttpNotRedirectedToHttps, 'http')],
+            ),
+            new PageAudit(
+                url: 'https://example.com/index.php',
+                statusCode: Response::HTTP_OK,
+                issues: [new Issue(IssueType::IndexFileDuplicate, 'index')],
+            ),
+        ]);
+
+        $auditor = new SiteAuditor(
+            $this->createMock(TargetProbeInterface::class),
+            disabledChecks: [IssueType::IndexFileDuplicate->value],
+            urlVariantAuditor: $variantAuditor,
+        );
+
+        $audited = $auditor->audit(
+            [$this->page('https://example.com/'), $this->page('https://example.com/a/')],
+            new CrawlContext(),
+        );
+
+        $this->assertCount(3, $audited);
+        $this->assertSame([], $audited[0]->issues);
+        $this->assertSame([IssueType::TrailingSlashDuplicate], self::types($audited[1]->issues));
+        $this->assertSame('http://example.com/', $audited[2]->url);
+        $this->assertSame([IssueType::HttpNotRedirectedToHttps], self::types($audited[2]->issues));
     }
 
     /**
