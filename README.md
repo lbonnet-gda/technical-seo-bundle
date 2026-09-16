@@ -88,6 +88,26 @@ An issue about a redirect itself (`redirect_loop`, `redirect_to_error`, `redirec
 is reported **once**, on the redirecting URL, however many pages link to it: that is where it gets fixed. Each linking
 page gets its own `internal_link_to_redirect` instead.
 
+### URL variants
+
+| Check                          | Severity | What it catches                                                          |
+|--------------------------------|----------|--------------------------------------------------------------------------|
+| `http_not_redirected_to_https` | error    | The `http://` home page answers 200 instead of redirecting to `https://` |
+| `host_variant_not_redirected`  | error    | The home page answers 200 on both `example.com` and `www.example.com`    |
+| `index_file_duplicate`         | warning  | `/index.php` or `/index.html` answers 200 with a copy of the home page   |
+| `trailing_slash_duplicate`     | warning  | A page also answers 200 with its trailing slash added or removed         |
+| `case_duplicate`               | warning  | A page also answers 200 with its path in another letter case             |
+
+These checks request other spellings of the crawled URLs. A variant is fine when it redirects permanently, answers an
+error, or declares the crawled URL as its canonical; a variant redirecting with a 302, 303, or 307 is reported as
+`temporary_redirect`. Each issue is reported on the variant URL.
+
+The first three checks cost up to four requests per crawl, on the home page of the start URL's host. The last two run on
+a sample of `url_variants_sample_size` pages, the shallowest first, at up to two requests each: a server usually applies
+the same rule to every URL. The `www`/apex check is skipped for a host with more labels (`shop.example.com`,
+`example.co.uk`), since telling a subdomain from a public suffix would need the Public Suffix List. A check listed in
+`disabled_checks` sends no request at all.
+
 ### hreflang
 
 | Check                           | Severity | What it catches                                                                                                                            |
@@ -139,6 +159,7 @@ technical_seo:
     max_redirect_hops: 1 # how many redirects a URL may go through before the chain is reported
     resolve_external_targets: true # request canonical and hreflang targets the crawl did not visit (and their host's robots.txt)
     max_external_target_checks: 200 # cap on those extra requests per crawl, robots.txt included (0 = unlimited)
+    url_variants_sample_size: 10 # pages checked for trailing slash and letter case duplicates (0 = none)
 
     fail_on: 'error' # lowest severity that makes the command exit non-zero: error, warning or notice
     disabled_checks: [ ] # issue types to leave out entirely, e.g. ['internal_link_to_redirect']

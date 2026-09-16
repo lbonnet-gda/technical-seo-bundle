@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Lbonnet\TechnicalSeoBundle\Crawler;
 
-use Lbonnet\CrawlerToolkit\Http\BoundedContentReader;
 use Lbonnet\CrawlerToolkit\Http\SiteThrottleExemption;
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxtCheckerInterface;
 use Lbonnet\TechnicalSeoBundle\Auditor\PageAuditorInterface;
@@ -13,6 +12,7 @@ use Lbonnet\TechnicalSeoBundle\Event\CrawlCompletedEvent;
 use Lbonnet\TechnicalSeoBundle\Extractor\HeadSignalsExtractorInterface;
 use Lbonnet\TechnicalSeoBundle\Extractor\InternalLinkExtractorInterface;
 use Lbonnet\TechnicalSeoBundle\Http\HeaderFetcher;
+use Lbonnet\TechnicalSeoBundle\Http\PageFetcher;
 use Lbonnet\TechnicalSeoBundle\Http\RedirectChainResolverInterface;
 use Lbonnet\TechnicalSeoBundle\Model\CrawlContext;
 use Lbonnet\TechnicalSeoBundle\Model\PageAudit;
@@ -23,7 +23,6 @@ use Lbonnet\TechnicalSeoBundle\Url\UrlResolver;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Throwable;
 
@@ -34,9 +33,9 @@ use Throwable;
  */
 final class SiteCrawler implements CrawlerInterface
 {
-    private const MAX_HTML_LENGTH = 5_000_000;
-
     public const DEFAULT_USER_AGENT = HeaderFetcher::DEFAULT_USER_AGENT;
+
+    private readonly PageFetcher $pageFetcher;
 
     public function __construct(
         private readonly InternalLinkExtractorInterface $linkExtractor,
@@ -48,12 +47,13 @@ final class SiteCrawler implements CrawlerInterface
         private readonly ?EventDispatcherInterface $eventDispatcher = null,
         private readonly ?RobotsTxtCheckerInterface $robotsTxtChecker = null,
         private readonly int $defaultMaxDepth = 3,
-        private readonly int $defaultTimeout = 10,
-        private readonly string $userAgent = self::DEFAULT_USER_AGENT,
+        int $defaultTimeout = 10,
+        string $userAgent = self::DEFAULT_USER_AGENT,
         /** @var list<string> */
         private readonly array $defaultExcludePatterns = [],
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {
+        $this->pageFetcher = new PageFetcher($httpClient, $defaultTimeout, $userAgent, $logger);
     }
 
     public function crawl(
@@ -98,7 +98,7 @@ final class SiteCrawler implements CrawlerInterface
                 }
 
                 $visited[$key] = true;
-                $page = $this->fetch($url, $depth);
+                $page = $this->pageFetcher->fetch($url, $depth);
 
                 if ($page === null) {
                     continue;
@@ -174,11 +174,11 @@ final class SiteCrawler implements CrawlerInterface
                     $queue[] = ['url' => $link->url, 'depth' => $depth + 1];
                 }
             }
+
+            $pages = $this->siteAuditor->audit($pages, new CrawlContext($responses, $chains, $referrers));
         } finally {
             $throttleExemption->end();
         }
-
-        $pages = $this->siteAuditor->audit($pages, new CrawlContext($responses, $chains, $referrers));
 
         $report = new TechnicalSeoReport(
             startUrl: $startUrl,
@@ -196,46 +196,6 @@ final class SiteCrawler implements CrawlerInterface
         }
 
         return $report;
-    }
-
-    private function fetch(string $url, int $depth): ?PageResponse
-    {
-        try {
-            $response = $this->httpClient->request(Request::METHOD_GET, $url, [
-                'timeout' => $this->defaultTimeout,
-                'max_redirects' => 0,
-                'headers' => [
-                    'User-Agent' => $this->userAgent,
-                ],
-            ]);
-
-            $statusCode = $response->getStatusCode();
-            /** @var array<string, list<string>> $headers */
-            $headers = $response->getHeaders(false);
-            $redirectLocation = $response->getInfo('redirect_url');
-
-            $page = new PageResponse(
-                url: $url,
-                statusCode: $statusCode,
-                headers: $headers,
-                depth: $depth,
-                redirectLocation: is_string($redirectLocation) ? $redirectLocation : null,
-            );
-
-            if (!$page->isSuccessful() || !$page->isHtml()) {
-                $response->cancel();
-
-                return $page;
-            }
-
-            return $page->withHtml(
-                BoundedContentReader::read($this->httpClient, $response, self::MAX_HTML_LENGTH)
-            );
-        } catch (Throwable $e) {
-            $this->logger->debug(sprintf('[TechnicalSeo] Could not fetch "%s": %s', $url, $e->getMessage()));
-
-            return null;
-        }
     }
 
     /**

@@ -10,11 +10,14 @@ use Lbonnet\CrawlerToolkit\Robots\RobotsTxtCheckerInterface;
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxtProviderInterface;
 use Lbonnet\TechnicalSeoBundle\Auditor\PageAuditor;
 use Lbonnet\TechnicalSeoBundle\Auditor\SiteAuditor;
+use Lbonnet\TechnicalSeoBundle\Auditor\UrlVariantAuditor;
+use Lbonnet\TechnicalSeoBundle\Auditor\UrlVariantAuditorInterface;
 use Lbonnet\TechnicalSeoBundle\Command\CheckTechnicalSeoCommand;
 use Lbonnet\TechnicalSeoBundle\Crawler\CrawlerInterface;
 use Lbonnet\TechnicalSeoBundle\Crawler\SiteCrawler;
 use Lbonnet\TechnicalSeoBundle\Http\HeaderFetcher;
 use Lbonnet\TechnicalSeoBundle\Http\HttpTargetProbe;
+use Lbonnet\TechnicalSeoBundle\Http\PageFetcher;
 use Lbonnet\TechnicalSeoBundle\Http\RedirectChainResolver;
 use Lbonnet\TechnicalSeoBundle\Http\TargetProbeInterface;
 use Lbonnet\TechnicalSeoBundle\Storage\JsonFileReportStorage;
@@ -41,6 +44,7 @@ final class TechnicalSeoBundleTest extends TestCase
         $this->assertSame(1, $container->getParameter('technical_seo.max_redirect_hops'));
         $this->assertTrue($container->getParameter('technical_seo.resolve_external_targets'));
         $this->assertSame(200, $container->getParameter('technical_seo.max_external_target_checks'));
+        $this->assertSame(10, $container->getParameter('technical_seo.url_variants_sample_size'));
         $this->assertSame('error', $container->getParameter('technical_seo.fail_on'));
         $this->assertSame([], $container->getParameter('technical_seo.disabled_checks'));
         $this->assertSame(
@@ -92,6 +96,7 @@ final class TechnicalSeoBundleTest extends TestCase
                 'disabled_checks' => ['internal_link_to_redirect'],
                 'exclude_patterns' => ['#/admin#'],
                 'respect_robots_txt' => false,
+                'url_variants_sample_size' => 0,
             ],
         ]);
 
@@ -103,14 +108,17 @@ final class TechnicalSeoBundleTest extends TestCase
         $this->assertSame(['internal_link_to_redirect'], $container->getParameter('technical_seo.disabled_checks'));
         $this->assertSame(['#/admin#'], $container->getParameter('technical_seo.exclude_patterns'));
         $this->assertFalse($container->getParameter('technical_seo.respect_robots_txt'));
+        $this->assertSame(0, $container->getParameter('technical_seo.url_variants_sample_size'));
 
         foreach (
             [
                 PageAuditor::class,
                 SiteAuditor::class,
+                UrlVariantAuditor::class,
                 SiteCrawler::class,
                 RedirectChainResolver::class,
                 HeaderFetcher::class,
+                PageFetcher::class,
                 HttpTargetProbe::class,
                 CheckTechnicalSeoCommand::class,
                 JsonFileReportStorage::class,
@@ -124,6 +132,7 @@ final class TechnicalSeoBundleTest extends TestCase
             [
                 CrawlerInterface::class,
                 TargetProbeInterface::class,
+                UrlVariantAuditorInterface::class,
                 ReportStorageInterface::class,
                 RobotsTxtCheckerInterface::class,
                 RobotsTxtProviderInterface::class,

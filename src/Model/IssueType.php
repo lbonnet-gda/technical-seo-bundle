@@ -34,6 +34,13 @@ enum IssueType: string
     case InternalLinkToRedirect = 'internal_link_to_redirect';
     case MetaRefreshRedirect = 'meta_refresh_redirect';
 
+    // --- URL variants ---
+    case HttpNotRedirectedToHttps = 'http_not_redirected_to_https';
+    case HostVariantNotRedirected = 'host_variant_not_redirected';
+    case IndexFileDuplicate = 'index_file_duplicate';
+    case TrailingSlashDuplicate = 'trailing_slash_duplicate';
+    case CaseDuplicate = 'case_duplicate';
+
     // --- hreflang ---
     case HreflangInvalidCode = 'hreflang_invalid_code';
     case HreflangNotInHead = 'hreflang_not_in_head';
@@ -68,6 +75,8 @@ enum IssueType: string
             self::RobotsTxtBlocksHreflangAlternate,
             self::RedirectLoop,
             self::RedirectToError,
+            self::HttpNotRedirectedToHttps,
+            self::HostVariantNotRedirected,
             self::HreflangInvalidCode,
             self::HreflangNotInHead,
             self::HreflangRelativeUrl,
@@ -86,6 +95,9 @@ enum IssueType: string
             self::TemporaryRedirect,
             self::InternalLinkToRedirect,
             self::MetaRefreshRedirect,
+            self::IndexFileDuplicate,
+            self::TrailingSlashDuplicate,
+            self::CaseDuplicate,
             self::MissingHtmlLang => Severity::Warning,
 
             self::HreflangMissingXDefault => Severity::Notice,
