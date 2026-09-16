@@ -613,6 +613,56 @@ final class SiteAuditorTest extends TestCase
         $this->assertSame([IssueType::RobotsTxtBlocksHreflangAlternate], self::types($audited[0]->issues));
     }
 
+    public function testReadsTheRobotsTxtOfATargetOnAnotherHostThroughTheProbe(): void
+    {
+        $probe = $this->createMock(TargetProbeInterface::class);
+        $probe->method('robotsTxt')->willReturnCallback(
+            static fn(string $url): ?RobotsTxt => parse_url($url, PHP_URL_HOST) === 'other.com'
+                ? self::robotsTxt('other.com', "User-agent: *\nDisallow: /private\n")
+                : null,
+        );
+        $probe->expects($this->never())->method('probe');
+
+        $auditor = $this->auditorWithRobotsTxt(
+            ['example.com' => self::robotsTxt('example.com', "User-agent: *\nAllow: /\n")],
+            $probe,
+        );
+
+        $audited = $auditor->audit(
+            [$this->page('https://example.com/a', canonical: 'https://other.com/private/b')],
+            new CrawlContext(),
+        );
+
+        $this->assertSame([IssueType::RobotsTxtBlocksCanonicalTarget], self::types($audited[0]->issues));
+    }
+
+    public function testATargetOnAnotherHostIsNotCheckedAgainstRobotsTxtWhenTheProbeDeclines(): void
+    {
+        $provider = $this->createMock(RobotsTxtProviderInterface::class);
+        $provider->method('robotsTxt')->willReturnCallback(
+            function (string $url): RobotsTxt {
+                $this->assertSame('example.com', parse_url($url, PHP_URL_HOST), 'only a crawled host is fetched');
+
+                return self::robotsTxt('example.com', "User-agent: *\nAllow: /\n");
+            },
+        );
+
+        $probe = $this->createMock(TargetProbeInterface::class);
+        $probe->method('robotsTxt')->willReturn(null);
+        $probe->expects($this->once())->method('probe')->willReturn(
+            new PageResponse(url: 'https://other.com/private/b', statusCode: Response::HTTP_OK),
+        );
+
+        $auditor = new SiteAuditor($probe, robotsTxtProvider: $provider);
+
+        $audited = $auditor->audit(
+            [$this->page('https://example.com/a', canonical: 'https://other.com/private/b')],
+            new CrawlContext(),
+        );
+
+        $this->assertSame([], $audited[0]->issues);
+    }
+
     public function testMergesUrlVariantIssuesIntoTheCrawledPageTheyConcern(): void
     {
         $variantAuditor = $this->createMock(UrlVariantAuditorInterface::class);
