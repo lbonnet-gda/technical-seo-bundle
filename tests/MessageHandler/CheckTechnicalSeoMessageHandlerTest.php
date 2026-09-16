@@ -17,12 +17,12 @@ final class CheckTechnicalSeoMessageHandlerTest extends TestCase
         $crawler = $this->createMock(CrawlerInterface::class);
         $crawler->expects($this->once())
             ->method('crawl')
-            ->with('https://example.com/blog', 2, ['#/preview#'])
+            ->with('https://example.com/blog', 2, ['#/preview#'], null, 50)
             ->willReturn(new TechnicalSeoReport('https://example.com/blog'));
 
         $handler = new CheckTechnicalSeoMessageHandler($crawler, defaultBaseUrl: 'https://example.com');
 
-        $handler(new CheckTechnicalSeoMessage('https://example.com/blog', 2, ['#/preview#']));
+        $handler(new CheckTechnicalSeoMessage('https://example.com/blog', 2, ['#/preview#'], 50));
     }
 
     public function testItFallsBackToTheConfiguredBaseUrl(): void

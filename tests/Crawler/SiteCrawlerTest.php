@@ -145,6 +145,38 @@ final class SiteCrawlerTest extends TestCase
         $this->assertSame(2, $report->totalChecked);
     }
 
+    public function testStopsAtTheMaxPagesLimitAndMarksTheReportAsTruncated(): void
+    {
+        $httpClient = $this->siteWith([
+            'https://example.com/' => self::html('https://example.com/', '<a href="/one">1</a><a href="/two">2</a>'),
+            'https://example.com/one' => self::html('https://example.com/one'),
+            'https://example.com/two' => self::html('https://example.com/two'),
+        ]);
+
+        $report = $this->crawler($httpClient)->crawl('https://example.com/', maxPages: 2);
+
+        $this->assertSame(2, $report->totalChecked);
+        $this->assertTrue($report->truncated);
+        $this->assertSame(['https://example.com/', 'https://example.com/one'], array_column($report->pages, 'url'));
+    }
+
+    public function testAReportIsNotTruncatedWhenTheSiteFitsTheLimitOrThereIsNone(): void
+    {
+        $httpClient = $this->siteWith([
+            'https://example.com/' => self::html('https://example.com/', '<a href="/one">1</a><a href="/">home</a>'),
+            'https://example.com/one' => self::html('https://example.com/one', '<a href="/">home</a>'),
+        ]);
+
+        foreach ([2, 0] as $maxPages) {
+            $report = $this->crawler($httpClient, maxPages: 1)->crawl('https://example.com/', maxPages: $maxPages);
+
+            $this->assertSame(2, $report->totalChecked, (string)$maxPages);
+            $this->assertFalse($report->truncated, (string)$maxPages);
+        }
+
+        $this->assertTrue($this->crawler($httpClient, maxPages: 1)->crawl('https://example.com/')->truncated);
+    }
+
     public function testDispatchesTheCompletedEvent(): void
     {
         $dispatcher = $this->createMock(EventDispatcherInterface::class);
@@ -349,6 +381,7 @@ final class SiteCrawlerTest extends TestCase
     private function crawler(
         HttpClientInterface $httpClient,
         int $maxDepth = 3,
+        int $maxPages = 500,
         ?EventDispatcherInterface $dispatcher = null,
     ): SiteCrawler {
         return new SiteCrawler(
@@ -360,6 +393,7 @@ final class SiteCrawlerTest extends TestCase
             $httpClient,
             eventDispatcher: $dispatcher,
             defaultMaxDepth: $maxDepth,
+            defaultMaxPages: $maxPages,
         );
     }
 

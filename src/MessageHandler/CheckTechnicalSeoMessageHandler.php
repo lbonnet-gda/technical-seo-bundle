@@ -36,6 +36,7 @@ final class CheckTechnicalSeoMessageHandler
             startUrl: $startUrl,
             maxDepth: $message->maxDepth,
             excludePatterns: $message->excludePatterns,
+            maxPages: $message->maxPages,
         );
     }
 }

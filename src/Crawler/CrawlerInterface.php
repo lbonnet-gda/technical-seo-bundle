@@ -16,11 +16,13 @@ interface CrawlerInterface
      * @param int|null $maxDepth Max depth (null = bundle default value)
      * @param list<string> $excludePatterns Additional exclusion regex patterns
      * @param (callable(string $currentUrl, int $totalChecked, int $issuesCount): void)|null $progressCallback
+     * @param int|null $maxPages Max number of pages to audit, 0 for no limit (null = bundle default value)
      */
     public function crawl(
         string $startUrl,
         ?int $maxDepth = null,
         array $excludePatterns = [],
         ?callable $progressCallback = null,
+        ?int $maxPages = null,
     ): TechnicalSeoReport;
 }
