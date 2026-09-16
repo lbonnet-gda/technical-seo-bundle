@@ -50,11 +50,14 @@ final class SiteAuditor implements SiteAuditorInterface
         $pagesByKey = [];
         /** @var array<string, array<string, string>> $hreflangUrlsByKey dedup key of a page URL => its hreflang URLs */
         $hreflangUrlsByKey = [];
+        /** @var array<string, true> $crawledHosts lower-case host => true */
+        $crawledHosts = [];
 
         foreach ($pages as $page) {
             $key = UrlResolver::dedupKey($page->url);
             $pagesByKey[$key] = $page;
             $hreflangUrlsByKey[$key] = $page->hreflangUrls();
+            $crawledHosts[self::hostOf($page->url)] = true;
         }
 
         /** @var array<string, list<Issue>> $extraIssues dedup key of a page URL => issues to add */
@@ -64,8 +67,8 @@ final class SiteAuditor implements SiteAuditorInterface
 
         foreach ($pages as $page) {
             $issues = [
-                ...$this->auditCanonicalTarget($page, $context, $pagesByKey),
-                ...$this->auditHreflangTargets($page, $context, $pagesByKey, $hreflangUrlsByKey),
+                ...$this->auditCanonicalTarget($page, $context, $pagesByKey, $crawledHosts),
+                ...$this->auditHreflangTargets($page, $context, $pagesByKey, $hreflangUrlsByKey, $crawledHosts),
             ];
 
             if ($issues !== []) {
@@ -110,18 +113,23 @@ final class SiteAuditor implements SiteAuditorInterface
 
     /**
      * @param array<string, PageAudit> $pagesByKey
+     * @param array<string, true> $crawledHosts
      *
      * @return list<Issue>
      */
-    private function auditCanonicalTarget(PageAudit $page, CrawlContext $context, array $pagesByKey): array
-    {
+    private function auditCanonicalTarget(
+        PageAudit $page,
+        CrawlContext $context,
+        array $pagesByKey,
+        array $crawledHosts,
+    ): array {
         $target = $page->canonicalElsewhere();
 
         if ($target === null) {
             return [];
         }
 
-        if ($this->isBlockedForGooglebot($target)) {
+        if ($this->isBlockedForGooglebot($target, $crawledHosts)) {
             return [
                 new Issue(
                     IssueType::RobotsTxtBlocksCanonicalTarget,
@@ -241,6 +249,7 @@ final class SiteAuditor implements SiteAuditorInterface
     /**
      * @param array<string, PageAudit> $pagesByKey
      * @param array<string, array<string, string>> $hreflangUrlsByKey
+     * @param array<string, true> $crawledHosts
      *
      * @return list<Issue>
      */
@@ -249,6 +258,7 @@ final class SiteAuditor implements SiteAuditorInterface
         CrawlContext $context,
         array $pagesByKey,
         array $hreflangUrlsByKey,
+        array $crawledHosts,
     ): array {
         if ($page->isCanonicalizedVariant()) {
             return [];
@@ -262,7 +272,7 @@ final class SiteAuditor implements SiteAuditorInterface
                 continue;
             }
 
-            if ($this->isBlockedForGooglebot($target)) {
+            if ($this->isBlockedForGooglebot($target, $crawledHosts)) {
                 $issues[] = new Issue(
                     IssueType::RobotsTxtBlocksHreflangAlternate,
                     sprintf(
@@ -418,9 +428,25 @@ final class SiteAuditor implements SiteAuditorInterface
         return null;
     }
 
-    private function isBlockedForGooglebot(string $url): bool
+    /**
+     * @param array<string, true> $crawledHosts
+     */
+    private function isBlockedForGooglebot(string $url, array $crawledHosts): bool
     {
-        return $this->robotsTxtProvider?->robotsTxt($url)?->isAllowed($url, self::GOOGLEBOT) === false;
+        if ($this->robotsTxtProvider === null) {
+            return false;
+        }
+
+        $robotsTxt = isset($crawledHosts[self::hostOf($url)])
+            ? $this->robotsTxtProvider->robotsTxt($url)
+            : $this->probe->robotsTxt($url);
+
+        return $robotsTxt?->isAllowed($url, self::GOOGLEBOT) === false;
+    }
+
+    private static function hostOf(string $url): string
+    {
+        return strtolower((string)parse_url($url, PHP_URL_HOST));
     }
 
     /**
