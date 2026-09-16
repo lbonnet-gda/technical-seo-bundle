@@ -105,7 +105,8 @@ error, or declares the crawled URL as its canonical; a variant redirecting with 
 The first three checks cost up to four requests per crawl, on the home page of the start URL's host. The last two run on
 a sample of `url_variants_sample_size` pages, the shallowest first, at up to two requests each: a server usually applies
 the same rule to every URL. The `www`/apex check is skipped for a host with more labels (`shop.example.com`,
-`example.co.uk`), since telling a subdomain from a public suffix would need the Public Suffix List.
+`example.co.uk`), since telling a subdomain from a public suffix would need the Public Suffix List. A check listed in
+`disabled_checks` sends no request at all.
 
 ### hreflang
 

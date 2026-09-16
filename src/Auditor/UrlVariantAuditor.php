@@ -18,12 +18,26 @@ final class UrlVariantAuditor implements UrlVariantAuditorInterface
 {
     private const INDEX_FILES = ['index.php', 'index.html'];
 
+    /** @var array<string, true> */
+    private readonly array $disabledChecks;
+
+    /**
+     * @param list<string> $disabledChecks IssueType values whose variants are not even requested
+     */
     public function __construct(
         private readonly PageFetcher $pageFetcher,
         private readonly HeadSignalsExtractorInterface $signalsExtractor,
         private readonly int $sampleSize = 10,
+        array $disabledChecks = [],
         private readonly ?RobotsTxtCheckerInterface $robotsTxtChecker = null,
     ) {
+        $disabled = [];
+
+        foreach ($disabledChecks as $check) {
+            $disabled[$check] = true;
+        }
+
+        $this->disabledChecks = $disabled;
     }
 
     public function audit(array $pages, CrawlContext $context): array
@@ -129,6 +143,10 @@ final class UrlVariantAuditor implements UrlVariantAuditorInterface
         string $message,
         CrawlContext $context,
     ): ?PageAudit {
+        if (isset($this->disabledChecks[$type->value])) {
+            return null;
+        }
+
         $crawled = $context->responseFor($variantUrl);
 
         if ($crawled !== null && !UrlResolver::isSameUrl($crawled->url, $variantUrl)) {

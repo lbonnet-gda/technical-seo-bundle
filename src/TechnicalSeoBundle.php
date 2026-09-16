@@ -82,7 +82,7 @@ final class TechnicalSeoBundle extends AbstractBundle
             ->defaultValue(10)
             ->min(0)
             ->info(
-                'How many crawled pages, shallowest first, to request again with their trailing slash toggled and their letter case changed, to catch duplicate URLs. The http://, www/apex and index file versions of the home page are always checked. Set to 0 to skip the per-page checks.'
+                'How many crawled pages, shallowest first, to request again with their trailing slash toggled and their letter case changed, to catch duplicate URLs. The http://, www/apex and index file versions of the home page are always checked. Set to 0 to skip the per-page checks; a check listed in disabled_checks sends no request at all.'
             )
             ->end();
 

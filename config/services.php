@@ -61,7 +61,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$disabledChecks', param('technical_seo.disabled_checks'));
 
     $services->set(UrlVariantAuditor::class)
-        ->arg('$sampleSize', param('technical_seo.url_variants_sample_size'));
+        ->arg('$sampleSize', param('technical_seo.url_variants_sample_size'))
+        ->arg('$disabledChecks', param('technical_seo.disabled_checks'));
 
     $services->set(RobotsTxtChecker::class)
         ->arg('$httpClient', service('technical_seo.http_client'))

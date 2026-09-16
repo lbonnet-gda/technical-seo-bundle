@@ -229,6 +229,34 @@ final class UrlVariantAuditorTest extends TestCase
         $this->assertContains('https://example.com/index.html', $this->requestedUrls);
     }
 
+    public function testADisabledCheckSendsNoRequest(): void
+    {
+        $pages = [self::page('https://example.com/'), self::page('https://example.com/products', depth: 1)];
+
+        $this->auditor([], disabledChecks: [IssueType::TrailingSlashDuplicate->value])
+            ->audit($pages, new CrawlContext());
+
+        $this->assertNotContains('https://example.com/products/', $this->requestedUrls);
+        $this->assertContains('https://example.com/PRODUCTS', $this->requestedUrls);
+
+        $this->requestedUrls = [];
+        $this->auditor(
+            [],
+            disabledChecks: array_map(
+                static fn(IssueType $type): string => $type->value,
+                [
+                    IssueType::HttpNotRedirectedToHttps,
+                    IssueType::HostVariantNotRedirected,
+                    IssueType::IndexFileDuplicate,
+                    IssueType::TrailingSlashDuplicate,
+                    IssueType::CaseDuplicate,
+                ],
+            ),
+        )->audit($pages, new CrawlContext());
+
+        $this->assertSame([], $this->requestedUrls);
+    }
+
     public function testReusesTheResponseOfAVariantTheCrawlAlreadyFetched(): void
     {
         [$html] = self::html();
@@ -260,11 +288,13 @@ final class UrlVariantAuditorTest extends TestCase
 
     /**
      * @param array<string, array{string, array<string, mixed>}> $responses URL => [body, info]
+     * @param list<string> $disabledChecks
      */
     private function auditor(
         array $responses,
         int $sampleSize = 10,
         ?RobotsTxtCheckerInterface $robotsTxtChecker = null,
+        array $disabledChecks = [],
     ): UrlVariantAuditor {
         $httpClient = new MockHttpClient(function (string $method, string $url) use ($responses): MockResponse {
             $this->requestedUrls[] = $url;
@@ -282,6 +312,7 @@ final class UrlVariantAuditorTest extends TestCase
             new PageFetcher($httpClient),
             new HtmlHeadSignalsExtractor(),
             $sampleSize,
+            $disabledChecks,
             $robotsTxtChecker,
         );
     }
