@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxtChecker;
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxtCheckerInterface;
+use Lbonnet\CrawlerToolkit\Robots\RobotsTxtProviderInterface;
 use Lbonnet\TechnicalSeoBundle\Auditor\SiteAuditor;
 use Lbonnet\TechnicalSeoBundle\Command\CheckTechnicalSeoCommand;
 use Lbonnet\TechnicalSeoBundle\Crawler\SiteCrawler;
@@ -58,6 +59,7 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$enabled', param('technical_seo.respect_robots_txt'));
 
     $services->alias(RobotsTxtCheckerInterface::class, RobotsTxtChecker::class);
+    $services->alias(RobotsTxtProviderInterface::class, RobotsTxtChecker::class);
 
     $services->set(CheckTechnicalSeoCommand::class)
         ->arg('$defaultBaseUrl', param('technical_seo.base_url'))

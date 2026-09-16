@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Lbonnet\TechnicalSeoBundle\Tests\Crawler;
 
 use Lbonnet\CrawlerToolkit\Http\ThrottleExemptionInterface;
+use Lbonnet\CrawlerToolkit\Robots\RobotsTxtChecker;
 use Lbonnet\TechnicalSeoBundle\Auditor\PageAuditor;
 use Lbonnet\TechnicalSeoBundle\Auditor\SiteAuditor;
 use Lbonnet\TechnicalSeoBundle\Crawler\SiteCrawler;
@@ -317,6 +318,32 @@ final class SiteCrawlerTest extends TestCase
 
         $this->assertSame(3, $report->totalChecked);
         $this->assertFalse($report->hasIssues());
+    }
+
+    public function testReportsARobotsTxtServerErrorOnItsOwnEntry(): void
+    {
+        $httpClient = $this->siteWith([
+            'https://example.com/' => self::html('https://example.com/'),
+            'https://example.com/robots.txt' => ['', ['http_code' => Response::HTTP_SERVICE_UNAVAILABLE]],
+        ]);
+        $robotsTxtChecker = new RobotsTxtChecker($httpClient, SiteCrawler::DEFAULT_USER_AGENT);
+
+        $crawler = new SiteCrawler(
+            new HtmlInternalLinkExtractor(),
+            new HtmlHeadSignalsExtractor(),
+            new PageAuditor(),
+            new SiteAuditor($this->createMock(TargetProbeInterface::class), robotsTxtProvider: $robotsTxtChecker),
+            new RedirectChainResolver(new HeaderFetcher($httpClient)),
+            $httpClient,
+            robotsTxtChecker: $robotsTxtChecker,
+        );
+
+        $report = $crawler->crawl('https://example.com/');
+
+        $this->assertSame(1, $report->totalChecked);
+        $this->assertSame([], $report->pages[0]->issues);
+        $this->assertSame('https://example.com/robots.txt', $report->pages[1]->url);
+        $this->assertSame([IssueType::RobotsTxtServerError], self::types($report->pages[1]->issues));
     }
 
     private function crawler(

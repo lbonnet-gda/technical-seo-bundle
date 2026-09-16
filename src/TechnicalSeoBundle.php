@@ -126,7 +126,7 @@ final class TechnicalSeoBundle extends AbstractBundle
         $children->booleanNode('respect_robots_txt')
             ->defaultTrue()
             ->info(
-                'Fetch and honor the crawled site\'s robots.txt: matching Disallow rules stop the crawler from following/auditing further internal pages under that path. Does not apply to the URL you explicitly start the crawl from.'
+                'Fetch and honor the crawled site\'s robots.txt: matching Disallow rules stop the crawler from following/auditing further internal pages under that path. Does not apply to the URL you explicitly start the crawl from. The robots.txt checks audit the file for Googlebot either way.'
             )
             ->end();
     }

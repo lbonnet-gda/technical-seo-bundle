@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Lbonnet\TechnicalSeoBundle\Auditor;
 
+use Lbonnet\CrawlerToolkit\Robots\RobotsTxt;
+use Lbonnet\CrawlerToolkit\Robots\RobotsTxtProviderInterface;
+use Lbonnet\CrawlerToolkit\Robots\RobotsTxtStatus;
 use Lbonnet\TechnicalSeoBundle\Http\TargetProbeInterface;
 use Lbonnet\TechnicalSeoBundle\Model\CrawlContext;
 use Lbonnet\TechnicalSeoBundle\Model\Issue;
@@ -16,6 +19,8 @@ use Lbonnet\TechnicalSeoBundle\Url\UrlResolver;
 
 final class SiteAuditor implements SiteAuditorInterface
 {
+    private const GOOGLEBOT = 'Googlebot';
+
     /** @var array<string, true> */
     private readonly array $disabledChecks;
 
@@ -26,6 +31,7 @@ final class SiteAuditor implements SiteAuditorInterface
         private readonly TargetProbeInterface $probe,
         private readonly int $maxRedirectHops = 1,
         array $disabledChecks = [],
+        private readonly ?RobotsTxtProviderInterface $robotsTxtProvider = null,
     ) {
         $disabled = [];
 
@@ -84,6 +90,8 @@ final class SiteAuditor implements SiteAuditorInterface
             }
         }
 
+        $extraPages = [...$extraPages, ...$this->auditRobotsTxt($pages)];
+
         $audited = array_map(
             function (PageAudit $page) use ($extraIssues): PageAudit {
                 $key = UrlResolver::dedupKey($page->url);
@@ -111,6 +119,19 @@ final class SiteAuditor implements SiteAuditorInterface
 
         if ($target === null) {
             return [];
+        }
+
+        if ($this->isBlockedForGooglebot($target)) {
+            return [
+                new Issue(
+                    IssueType::RobotsTxtBlocksCanonicalTarget,
+                    sprintf(
+                        'The canonical URL "%s" is blocked for Googlebot by robots.txt, '
+                        .'so Google cannot crawl it to confirm the canonical.',
+                        $target,
+                    ),
+                ),
+            ];
         }
 
         $response = $context->responseFor($target) ?? $this->probe->probe($target);
@@ -241,6 +262,19 @@ final class SiteAuditor implements SiteAuditorInterface
                 continue;
             }
 
+            if ($this->isBlockedForGooglebot($target)) {
+                $issues[] = new Issue(
+                    IssueType::RobotsTxtBlocksHreflangAlternate,
+                    sprintf(
+                        'The hreflang alternate "%s" is blocked for Googlebot by robots.txt, '
+                        .'so Google cannot crawl it to confirm the return link.',
+                        $target,
+                    ),
+                );
+
+                continue;
+            }
+
             $response = $context->responseFor($target) ?? $this->probe->probe($target);
 
             if ($response === null) {
@@ -313,6 +347,80 @@ final class SiteAuditor implements SiteAuditorInterface
         }
 
         return $issues;
+    }
+
+    /**
+     * @param list<PageAudit> $pages
+     *
+     * @return list<PageAudit>
+     */
+    private function auditRobotsTxt(array $pages): array
+    {
+        $provider = $this->robotsTxtProvider;
+
+        if ($provider === null) {
+            return [];
+        }
+
+        /** @var array<string, string> $urlByHost lower-case host => one crawled URL on that host */
+        $urlByHost = [];
+
+        foreach ($pages as $page) {
+            $host = parse_url($page->url, PHP_URL_HOST);
+
+            if (is_string($host)) {
+                $urlByHost[strtolower($host)] ??= $page->url;
+            }
+        }
+
+        $audits = [];
+
+        foreach ($urlByHost as $url) {
+            $robotsTxt = $provider->robotsTxt($url);
+
+            if ($robotsTxt === null) {
+                continue;
+            }
+
+            $issue = $this->robotsTxtIssue($robotsTxt, $url);
+
+            if ($issue !== null) {
+                $audits[] = new PageAudit(
+                    url: $robotsTxt->url,
+                    statusCode: $robotsTxt->statusCode ?? 0,
+                    issues: [$issue],
+                );
+            }
+        }
+
+        return $audits;
+    }
+
+    private function robotsTxtIssue(RobotsTxt $robotsTxt, string $siteUrl): ?Issue
+    {
+        if ($robotsTxt->status === RobotsTxtStatus::ServerError) {
+            return new Issue(
+                IssueType::RobotsTxtServerError,
+                ($robotsTxt->statusCode !== null
+                    ? sprintf('The robots.txt answers %d.', $robotsTxt->statusCode)
+                    : 'The robots.txt could not be fetched (timeout, DNS or connection failure).')
+                .' While it cannot be fetched, Google stops crawling the whole site.',
+            );
+        }
+
+        if (!$robotsTxt->isAllowed(UrlResolver::resolve($siteUrl, '/') ?? $siteUrl, self::GOOGLEBOT)) {
+            return new Issue(
+                IssueType::RobotsTxtDisallowAll,
+                'The robots.txt blocks Googlebot from the site root, so Google cannot crawl the site.',
+            );
+        }
+
+        return null;
+    }
+
+    private function isBlockedForGooglebot(string $url): bool
+    {
+        return $this->robotsTxtProvider?->robotsTxt($url)?->isAllowed($url, self::GOOGLEBOT) === false;
     }
 
     /**
