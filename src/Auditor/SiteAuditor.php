@@ -33,6 +33,7 @@ final class SiteAuditor implements SiteAuditorInterface
         array $disabledChecks = [],
         private readonly ?RobotsTxtProviderInterface $robotsTxtProvider = null,
         private readonly ?UrlVariantAuditorInterface $urlVariantAuditor = null,
+        private readonly ?SitemapAuditorInterface $sitemapAuditor = null,
     ) {
         $disabled = [];
 
@@ -96,14 +97,19 @@ final class SiteAuditor implements SiteAuditorInterface
 
         $extraPages = [...$extraPages, ...$this->auditRobotsTxt($pages)];
 
-        foreach ($this->urlVariantAuditor?->audit($pages, $context) ?? [] as $variant) {
-            $key = UrlResolver::dedupKey($variant->url);
+        $entries = [
+            ...$this->urlVariantAuditor?->audit($pages, $context) ?? [],
+            ...$this->sitemapAuditor?->audit($pages, $context) ?? [],
+        ];
+
+        foreach ($entries as $entry) {
+            $key = UrlResolver::dedupKey($entry->url);
             $crawledPage = $pagesByKey[$key] ?? null;
 
-            if ($crawledPage !== null && UrlResolver::isSameUrl($crawledPage->url, $variant->url)) {
-                $extraIssues[$key] = [...($extraIssues[$key] ?? []), ...$variant->issues];
+            if ($crawledPage !== null && UrlResolver::isSameUrl($crawledPage->url, $entry->url)) {
+                $extraIssues[$key] = [...($extraIssues[$key] ?? []), ...$entry->issues];
             } else {
-                $extraPages[] = $variant;
+                $extraPages[] = $entry;
             }
         }
 

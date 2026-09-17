@@ -59,6 +59,15 @@ final class CheckTechnicalSeoCommandTest extends TestCase
         $this->assertStringContainsString('Stopped after 25 page(s)', $tester->getDisplay());
     }
 
+    public function testItWarnsWhenRobotsTxtBlockedTheCrawl(): void
+    {
+        $tester = $this->tester(new TechnicalSeoReport('https://example.com', [], 1, 0.12, blockedByRobotsTxt: true));
+
+        $tester->execute([]);
+
+        $this->assertStringContainsString('answers a server error', $tester->getDisplay());
+    }
+
     public function testItFailsOnAnErrorLevelIssue(): void
     {
         $tester = $this->tester($this->reportWith(IssueType::CanonicalMultiple));

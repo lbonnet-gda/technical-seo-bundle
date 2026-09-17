@@ -87,6 +87,7 @@ final class SiteCrawler implements CrawlerInterface
 
         $startKey = UrlResolver::dedupKey($startUrl);
         $siteHost = self::hostOf($startUrl);
+        $siteUrl = $startUrl;
         $throttleExemption = SiteThrottleExemption::begin($this->httpClient, $startUrl, $this->robotsTxtChecker);
 
         try {
@@ -127,6 +128,7 @@ final class SiteCrawler implements CrawlerInterface
 
                         if ($finalHost !== null && strcasecmp($finalHost, (string)$siteHost) !== 0) {
                             $siteHost = $finalHost;
+                            $siteUrl = $finalUrl;
                             $throttleExemption->moveTo($finalUrl);
                         }
                     }
@@ -196,6 +198,7 @@ final class SiteCrawler implements CrawlerInterface
             totalChecked: $totalChecked,
             totalDuration: round(microtime(true) - $startTime, 3),
             truncated: $truncated,
+            blockedByRobotsTxt: $this->robotsTxtChecker?->isSiteBlocked($siteUrl) === true,
         );
 
         try {

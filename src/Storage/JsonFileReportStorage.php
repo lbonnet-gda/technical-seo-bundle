@@ -45,6 +45,7 @@ final class JsonFileReportStorage implements ReportStorageInterface
             'totalChecked' => $report->totalChecked,
             'totalDuration' => $report->totalDuration,
             'truncated' => $report->truncated,
+            'blockedByRobotsTxt' => $report->blockedByRobotsTxt,
             'issuesCount' => $report->getIssuesCount(),
             'issuesBySeverity' => $report->getIssuesCountBySeverity(),
             'pages' => array_map(static fn(PageAudit $page): array => [

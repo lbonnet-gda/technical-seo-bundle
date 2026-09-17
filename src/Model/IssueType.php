@@ -26,6 +26,18 @@ enum IssueType: string
     case RobotsTxtBlocksCanonicalTarget = 'robots_txt_blocks_canonical_target';
     case RobotsTxtBlocksHreflangAlternate = 'robots_txt_blocks_hreflang_alternate';
 
+    // --- Sitemaps ---
+    case SitemapMissing = 'sitemap_missing';
+    case SitemapNotOk = 'sitemap_not_ok';
+    case SitemapInvalid = 'sitemap_invalid';
+    case SitemapUrlInvalid = 'sitemap_url_invalid';
+    case SitemapUrlNotOk = 'sitemap_url_not_ok';
+    case SitemapUrlRedirects = 'sitemap_url_redirects';
+    case SitemapUrlNoindex = 'sitemap_url_noindex';
+    case SitemapUrlNotCanonical = 'sitemap_url_not_canonical';
+    case SitemapUrlBlockedByRobotsTxt = 'sitemap_url_blocked_by_robots_txt';
+    case PageMissingFromSitemap = 'page_missing_from_sitemap';
+
     // --- Redirects ---
     case RedirectLoop = 'redirect_loop';
     case RedirectToError = 'redirect_to_error';
@@ -73,6 +85,13 @@ enum IssueType: string
             self::RobotsTxtDisallowAll,
             self::RobotsTxtBlocksCanonicalTarget,
             self::RobotsTxtBlocksHreflangAlternate,
+            self::SitemapNotOk,
+            self::SitemapInvalid,
+            self::SitemapUrlInvalid,
+            self::SitemapUrlNotOk,
+            self::SitemapUrlNoindex,
+            self::SitemapUrlNotCanonical,
+            self::SitemapUrlBlockedByRobotsTxt,
             self::RedirectLoop,
             self::RedirectToError,
             self::HttpNotRedirectedToHttps,
@@ -93,6 +112,7 @@ enum IssueType: string
             self::CanonicalChain,
             self::RedirectChainTooLong,
             self::TemporaryRedirect,
+            self::SitemapUrlRedirects,
             self::InternalLinkToRedirect,
             self::MetaRefreshRedirect,
             self::IndexFileDuplicate,
@@ -100,6 +120,8 @@ enum IssueType: string
             self::CaseDuplicate,
             self::MissingHtmlLang => Severity::Warning,
 
+            self::SitemapMissing,
+            self::PageMissingFromSitemap,
             self::HreflangMissingXDefault => Severity::Notice,
         };
     }

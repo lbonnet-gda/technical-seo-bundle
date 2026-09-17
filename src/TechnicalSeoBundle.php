@@ -94,6 +94,14 @@ final class TechnicalSeoBundle extends AbstractBundle
             )
             ->end();
 
+        $children->integerNode('max_sitemap_files')
+            ->defaultValue(10)
+            ->min(0)
+            ->info(
+                'Maximum number of sitemap files, indexes included, fetched per crawl (0 = unlimited). Past it, the remaining sitemaps are not read and pages missing from the sitemaps are not reported.'
+            )
+            ->end();
+
         $children->enumNode('fail_on')
             ->values([Severity::Error->value, Severity::Warning->value, Severity::Notice->value])
             ->defaultValue(Severity::Error->value)
@@ -142,7 +150,7 @@ final class TechnicalSeoBundle extends AbstractBundle
         $children->booleanNode('respect_robots_txt')
             ->defaultTrue()
             ->info(
-                'Fetch and honor the crawled site\'s robots.txt: matching Disallow rules stop the crawler from following/auditing further internal pages under that path. Does not apply to the URL you explicitly start the crawl from. The robots.txt checks audit the file for Googlebot either way.'
+                'Fetch and honor the crawled site\'s robots.txt: matching Disallow rules stop the crawler from following/auditing further internal pages under that path. Does not apply to the URL you explicitly start the crawl from. Like Google, a robots.txt answering a server error (5xx, 429 or no response) blocks every other page. The robots.txt checks audit the file for Googlebot either way.'
             )
             ->end();
     }
@@ -159,6 +167,7 @@ final class TechnicalSeoBundle extends AbstractBundle
      *     resolve_external_targets: bool,
      *     max_external_target_checks: int,
      *     url_variants_sample_size: int,
+     *     max_sitemap_files: int,
      *     fail_on: string,
      *     disabled_checks: list<string>,
      *     storage_dir: string|null,
@@ -183,6 +192,7 @@ final class TechnicalSeoBundle extends AbstractBundle
             ->set('technical_seo.resolve_external_targets', $config['resolve_external_targets'])
             ->set('technical_seo.max_external_target_checks', $config['max_external_target_checks'])
             ->set('technical_seo.url_variants_sample_size', $config['url_variants_sample_size'])
+            ->set('technical_seo.max_sitemap_files', $config['max_sitemap_files'])
             ->set('technical_seo.fail_on', $config['fail_on'])
             ->set('technical_seo.disabled_checks', $config['disabled_checks'])
             ->set('technical_seo.storage_dir', $config['storage_dir'])

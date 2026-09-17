@@ -6,12 +6,14 @@ use Lbonnet\CrawlerToolkit\Robots\RobotsTxtChecker;
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxtCheckerInterface;
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxtProviderInterface;
 use Lbonnet\TechnicalSeoBundle\Auditor\SiteAuditor;
+use Lbonnet\TechnicalSeoBundle\Auditor\SitemapAuditor;
 use Lbonnet\TechnicalSeoBundle\Auditor\UrlVariantAuditor;
 use Lbonnet\TechnicalSeoBundle\Command\CheckTechnicalSeoCommand;
 use Lbonnet\TechnicalSeoBundle\Crawler\SiteCrawler;
 use Lbonnet\TechnicalSeoBundle\Http\HeaderFetcher;
 use Lbonnet\TechnicalSeoBundle\Http\HttpTargetProbe;
 use Lbonnet\TechnicalSeoBundle\Http\PageFetcher;
+use Lbonnet\TechnicalSeoBundle\Http\SitemapFetcher;
 use Lbonnet\TechnicalSeoBundle\MessageHandler\CheckTechnicalSeoMessageHandler;
 use Lbonnet\TechnicalSeoBundle\Storage\JsonFileReportStorage;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
@@ -33,6 +35,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Message/',
             '../src/Url/',
             '../src/Hreflang/',
+            '../src/Sitemap/',
         ]);
 
     $services->set(SiteCrawler::class)
@@ -53,6 +56,11 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$timeout', param('technical_seo.timeout'))
         ->arg('$userAgent', param('technical_seo.user_agent'));
 
+    $services->set(SitemapFetcher::class)
+        ->arg('$httpClient', service('technical_seo.http_client'))
+        ->arg('$timeout', param('technical_seo.timeout'))
+        ->arg('$userAgent', param('technical_seo.user_agent'));
+
     $services->set(HttpTargetProbe::class)
         ->arg('$enabled', param('technical_seo.resolve_external_targets'))
         ->arg('$maxProbes', param('technical_seo.max_external_target_checks'));
@@ -63,6 +71,10 @@ return static function (ContainerConfigurator $container): void {
 
     $services->set(UrlVariantAuditor::class)
         ->arg('$sampleSize', param('technical_seo.url_variants_sample_size'))
+        ->arg('$disabledChecks', param('technical_seo.disabled_checks'));
+
+    $services->set(SitemapAuditor::class)
+        ->arg('$maxFiles', param('technical_seo.max_sitemap_files'))
         ->arg('$disabledChecks', param('technical_seo.disabled_checks'));
 
     $services->set(RobotsTxtChecker::class)

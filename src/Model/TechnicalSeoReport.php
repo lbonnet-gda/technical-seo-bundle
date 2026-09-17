@@ -17,6 +17,7 @@ final class TechnicalSeoReport
         public readonly int $totalChecked = 0,
         public readonly float $totalDuration = 0.0,
         public readonly bool $truncated = false,
+        public readonly bool $blockedByRobotsTxt = false,
     ) {
     }
 
