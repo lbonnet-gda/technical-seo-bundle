@@ -157,6 +157,14 @@ final class CheckTechnicalSeoCommand extends Command
                 $io->newLine();
             }
 
+            if ($report->blockedByRobotsTxt) {
+                $io->warning(
+                    'The site\'s robots.txt answers a server error (5xx, 429 or no response at all): like Google, '
+                    .'the crawl did not go past the start page. Set "technical_seo.respect_robots_txt" to false to '
+                    .'audit the site anyway.'
+                );
+            }
+
             if ($report->truncated) {
                 $io->warning(
                     sprintf(

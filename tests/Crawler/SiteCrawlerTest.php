@@ -352,10 +352,11 @@ final class SiteCrawlerTest extends TestCase
         $this->assertFalse($report->hasIssues());
     }
 
-    public function testReportsARobotsTxtServerErrorOnItsOwnEntry(): void
+    public function testARobotsTxtServerErrorStopsTheCrawlAndIsReportedOnItsOwnEntry(): void
     {
         $httpClient = $this->siteWith([
-            'https://example.com/' => self::html('https://example.com/'),
+            'https://example.com/' => self::html('https://example.com/', '<a href="/page">page</a>'),
+            'https://example.com/page' => self::html('https://example.com/page'),
             'https://example.com/robots.txt' => ['', ['http_code' => Response::HTTP_SERVICE_UNAVAILABLE]],
         ]);
         $robotsTxtChecker = new RobotsTxtChecker($httpClient, SiteCrawler::DEFAULT_USER_AGENT);
@@ -374,6 +375,7 @@ final class SiteCrawlerTest extends TestCase
 
         $this->assertSame(1, $report->totalChecked);
         $this->assertSame([], $report->pages[0]->issues);
+        $this->assertTrue($report->blockedByRobotsTxt);
         $this->assertSame('https://example.com/robots.txt', $report->pages[1]->url);
         $this->assertSame([IssueType::RobotsTxtServerError], self::types($report->pages[1]->issues));
     }

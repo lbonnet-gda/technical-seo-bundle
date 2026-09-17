@@ -33,7 +33,7 @@ jobs:
                 uses: shivammathur/setup-php@v2
                 with:
                     php-version: ${{ matrix.php }}
-                    extensions: mbstring, xml, ctype, iconv
+                    extensions: mbstring, xml, xmlreader, zlib, ctype, iconv
                     coverage: none
 
             -   name: Configure Symfony requirement
@@ -67,7 +67,7 @@ jobs:
                 uses: shivammathur/setup-php@v2
                 with:
                     php-version: '8.4'
-                    extensions: mbstring, xml, ctype, iconv
+                    extensions: mbstring, xml, xmlreader, zlib, ctype, iconv
                     coverage: none
 
             -   name: Install dependencies

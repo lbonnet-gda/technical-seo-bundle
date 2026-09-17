@@ -7,6 +7,7 @@ namespace Lbonnet\TechnicalSeoBundle\Tests\Auditor;
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxt;
 use Lbonnet\CrawlerToolkit\Robots\RobotsTxtProviderInterface;
 use Lbonnet\TechnicalSeoBundle\Auditor\SiteAuditor;
+use Lbonnet\TechnicalSeoBundle\Auditor\SitemapAuditorInterface;
 use Lbonnet\TechnicalSeoBundle\Auditor\UrlVariantAuditorInterface;
 use Lbonnet\TechnicalSeoBundle\Http\TargetProbeInterface;
 use Lbonnet\TechnicalSeoBundle\Model\CrawlContext;
@@ -661,6 +662,35 @@ final class SiteAuditorTest extends TestCase
         );
 
         $this->assertSame([], $audited[0]->issues);
+    }
+
+    public function testMergesSitemapIssuesIntoTheCrawledPageTheyConcern(): void
+    {
+        $sitemapAuditor = $this->createMock(SitemapAuditorInterface::class);
+        $sitemapAuditor->method('audit')->willReturn([
+            new PageAudit(
+                url: 'https://example.com/sitemap.xml',
+                statusCode: Response::HTTP_OK,
+                issues: [new Issue(IssueType::SitemapUrlNotOk, 'gone')],
+            ),
+            new PageAudit(
+                url: 'https://example.com/a',
+                statusCode: Response::HTTP_OK,
+                issues: [new Issue(IssueType::PageMissingFromSitemap, 'missing')],
+            ),
+        ]);
+
+        $auditor = new SiteAuditor(
+            $this->createMock(TargetProbeInterface::class),
+            sitemapAuditor: $sitemapAuditor,
+        );
+
+        $audited = $auditor->audit([$this->page('https://example.com/a')], new CrawlContext());
+
+        $this->assertCount(2, $audited);
+        $this->assertSame([IssueType::PageMissingFromSitemap], self::types($audited[0]->issues));
+        $this->assertSame('https://example.com/sitemap.xml', $audited[1]->url);
+        $this->assertSame([IssueType::SitemapUrlNotOk], self::types($audited[1]->issues));
     }
 
     public function testMergesUrlVariantIssuesIntoTheCrawledPageTheyConcern(): void

@@ -71,7 +71,9 @@ These checks read `robots.txt` the way Google does and evaluate its rules for Go
 sends, and whatever `respect_robots_txt` says. A problem with the file itself is reported once, on its URL. A blocked
 canonical target or hreflang alternate is not checked any further, since Google cannot read it anyway. For a target on a
 host the crawl did not visit, fetching its `robots.txt` is an extra request: it only happens with
-`resolve_external_targets` enabled, and counts towards `max_external_target_checks`.
+`resolve_external_targets` enabled, and counts towards `max_external_target_checks`. With `respect_robots_txt` enabled,
+a `robots.txt` answering a server error also stops the crawl itself, as it stops Google: only the starting URL is
+audited, and the report is flagged `blockedByRobotsTxt`.
 
 ### Redirects
 
@@ -107,6 +109,32 @@ a sample of `url_variants_sample_size` pages, the shallowest first, at up to two
 the same rule to every URL. The `www`/apex check is skipped for a host with more labels (`shop.example.com`,
 `example.co.uk`), since telling a subdomain from a public suffix would need the Public Suffix List. A check listed in
 `disabled_checks` sends no request at all.
+
+### Sitemaps
+
+| Check                               | Severity | What it catches                                                                              |
+|-------------------------------------|----------|----------------------------------------------------------------------------------------------|
+| `sitemap_missing`                   | notice   | No `Sitemap:` line in `robots.txt`, and no `/sitemap.xml` either                             |
+| `sitemap_not_ok`                    | error    | A declared sitemap, or one listed in a sitemap index, does not answer 200                    |
+| `sitemap_invalid`                   | error    | A sitemap that is not valid XML, over 50,000 entries or 50 MB, or a nested sitemap index     |
+| `sitemap_url_invalid`               | error    | A listed URL that is relative or on another host, or a sitemap outside its index's directory |
+| `sitemap_url_not_ok`                | error    | A listed URL answering 4xx/5xx                                                               |
+| `sitemap_url_redirects`             | warning  | A listed URL answering 3xx instead of the final URL                                          |
+| `sitemap_url_noindex`               | error    | A listed URL carrying a noindex directive                                                    |
+| `sitemap_url_not_canonical`         | error    | A listed URL whose canonical points elsewhere                                                |
+| `sitemap_url_blocked_by_robots_txt` | error    | A listed URL blocked for Googlebot                                                           |
+| `page_missing_from_sitemap`         | notice   | A crawled page that is indexable and canonical, but listed in no sitemap                     |
+
+Sitemaps are read from the `Sitemap:` lines of `robots.txt`, or from `/sitemap.xml` when there are none. A sitemap index
+is followed one level deep, gzipped sitemaps are supported, and at most `max_sitemap_files` files are fetched. Issues
+about a sitemap or the URLs it lists are reported on the sitemap itself, where they get fixed;
+`page_missing_from_sitemap` is reported on the page, and only when every sitemap could be read in full.
+
+A listed URL the crawl did not visit is checked through the same requests as canonical and hreflang targets, so
+`resolve_external_targets` and `max_external_target_checks` apply, and only its status code and `X-Robots-Tag` header
+are read: `sitemap_url_noindex` (for a meta-robots tag) and `sitemap_url_not_canonical` are only reported for crawled
+pages. When `robots.txt` answers a server error, no sitemap check runs, since Google does not crawl the site anyway. A
+check listed in `disabled_checks` sends no request.
 
 ### hreflang
 
@@ -161,6 +189,7 @@ technical_seo:
     resolve_external_targets: true # request canonical and hreflang targets the crawl did not visit (and their host's robots.txt)
     max_external_target_checks: 200 # cap on those extra requests per crawl, robots.txt included (0 = unlimited)
     url_variants_sample_size: 10 # pages checked for trailing slash and letter case duplicates (0 = none)
+    max_sitemap_files: 10 # sitemap files, indexes included, fetched per crawl (0 = unlimited)
 
     fail_on: 'error' # lowest severity that makes the command exit non-zero: error, warning or notice
     disabled_checks: [ ] # issue types to leave out entirely, e.g. ['internal_link_to_redirect']
@@ -288,6 +317,7 @@ Unless `storage_dir` is disabled, each crawl is stored as JSON:
     "totalChecked": 128,
     "totalDuration": 41.7,
     "truncated": false,
+    "blockedByRobotsTxt": false,
     "issuesCount": 6,
     "issuesBySeverity": {
         "error": 2,
